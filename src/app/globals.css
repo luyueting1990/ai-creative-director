@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ivory: #f7f4ee;
+  --color-paper: #fbfaf7;
+  --color-ink: #151412;
+  --color-muted: #6f685e;
+  --color-line: #e5dfd4;
+  --color-accent: #a8743b;
+  --color-accent-soft: #f1e6d6;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes shimmer {
+    from { background-position: -400px 0; }
+    to { background-position: 400px 0; }
+  }
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--color-ivory);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+/* Subtle paper grain for the editorial feel. */
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  background-image: radial-gradient(rgba(21, 20, 18, 0.06) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(21,20,18,0.05) 0%, rgba(21,20,18,0.1) 50%, rgba(21,20,18,0.05) 100%);
+  background-size: 800px 100%;
+  animation: var(--animate-shimmer);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
