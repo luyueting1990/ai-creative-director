@@ -21,6 +21,7 @@ export class ApiError extends Error {
 export async function requestCampaign(
   brief: BriefInput,
   mode: "demo" | "live",
+  photoCount = 0,
   signal?: AbortSignal,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Campaign> {
@@ -29,7 +30,7 @@ export async function requestCampaign(
     res = await fetchImpl("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ brief, mode }),
+      body: JSON.stringify({ brief, mode, photoCount }),
       signal,
     });
   } catch (err) {

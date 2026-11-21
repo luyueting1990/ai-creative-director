@@ -1,49 +1,40 @@
 import { createId } from "./id";
-import type { Caption, Concept, Frame, Platform, Shot } from "./schema";
+import type { Caption, Concept, Hook, Platform, Shot } from "./schema";
 
 /**
- * Pure reducer for editing a set of concepts. Keeping edits here (instead of
- * scattered setState calls) makes every editing behaviour unit-testable.
+ * Pure reducer for editing concepts. Keeping edits here (instead of scattered
+ * setState calls) makes every editing behaviour unit-testable.
  */
 
-type ListKey = "storyboard" | "shotList" | "captions";
-type ItemOf<K extends ListKey> = K extends "storyboard" ? Frame : K extends "shotList" ? Shot : Caption;
+export type ListKey = "shots" | "hooks" | "captions";
+type ItemOf<K extends ListKey> = K extends "shots" ? Shot : K extends "hooks" ? Hook : Caption;
 
 export type EditorAction =
   | { type: "reset"; concepts: Concept[] }
-  | {
-      type: "updateConcept";
-      conceptId: string;
-      patch: Partial<Omit<Concept, "id" | "storyboard" | "shotList" | "captions">>;
-    }
+  | { type: "updateConcept"; conceptId: string; patch: Partial<Omit<Concept, "id" | "shots" | "hooks" | "captions">> }
   | { type: "updateItem"; conceptId: string; list: ListKey; itemId: string; patch: Record<string, unknown> }
-  | { type: "addItem"; conceptId: string; list: ListKey; afterId?: string; platform?: Platform }
+  | { type: "addItem"; conceptId: string; list: ListKey; afterId?: string; platform?: Platform; id?: string }
   | { type: "removeItem"; conceptId: string; list: ListKey; itemId: string }
   | { type: "moveItem"; conceptId: string; list: ListKey; itemId: string; direction: -1 | 1 };
 
-export function blankItem<K extends ListKey>(list: K, platform: Platform = "instagram"): ItemOf<K> {
+export function blankItem<K extends ListKey>(list: K, platform: Platform = "instagram", id?: string): ItemOf<K> {
   switch (list) {
-    case "storyboard":
+    case "shots":
       return {
-        id: createId("frame"),
-        title: "New frame",
-        visual: "",
-        audio: "",
-        onScreenText: "",
-        durationSec: 3,
-      } as ItemOf<K>;
-    case "shotList":
-      return {
-        id: createId("shot"),
-        shotType: "Medium",
+        id: id ?? createId("shot"),
+        title: "New shot",
         description: "",
-        camera: "",
-        location: "",
-        talent: "",
         durationSec: 3,
+        showsProduct: true,
+        onScreenText: "",
+        camera: "",
+        setting: "",
+        direction: "",
       } as ItemOf<K>;
+    case "hooks":
+      return { id: id ?? createId("hook"), platform, text: "" } as ItemOf<K>;
     default:
-      return { id: createId("caption"), platform, text: "", hashtags: [] } as unknown as ItemOf<K>;
+      return { id: id ?? createId("caption"), platform, text: "", hashtags: [] } as unknown as ItemOf<K>;
   }
 }
 
@@ -70,7 +61,7 @@ export function editorReducer(state: Concept[], action: EditorAction): Concept[]
     case "addItem":
       return mapConcept(state, action.conceptId, (c) => {
         const list = [...(c[action.list] as { id: string }[])];
-        const item = blankItem(action.list, action.platform);
+        const item = blankItem(action.list, action.platform, action.id);
         const idx = action.afterId ? list.findIndex((i) => i.id === action.afterId) : -1;
         if (idx >= 0) list.splice(idx + 1, 0, item);
         else list.push(item);

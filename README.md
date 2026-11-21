@@ -1,36 +1,61 @@
 # AI Creative Director
 
-**Turn a fashion brand brief into three campaign concepts in under a minute.** Each concept includes a big idea, a visual direction and colour palette, an editable video storyboard, a production-ready shot list, and captions written for each social platform.
+**A simple creative tool for fashion campaigns.** Describe a brand and product, add photos if you have them, and get three campaign ideas with a visual storyboard you can edit and export, all on one page.
 
-Built with **Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · Claude API · Zod · Vitest**.
+Built with **Next.js 16 · TypeScript · Tailwind CSS 4 · Zod · Vitest**, with an optional server-side **Claude API** integration.
 
-![Campaign results](docs/screenshot-results.png)
+![Results](docs/screenshot-results.jpg)
 
-> **Try it without an API key.** Demo mode is on by default and works fully offline: pick a sample brief, click **Generate campaign**, then edit, save and export.
+> **No API key needed.** Demo mode is the default. It uses clearly labelled, rule-based logic (not AI analysis), so anyone can try the full workflow.
 
 ---
 
-## Features
+## How it works
+
+Two screens and three clicks from brief to export:
+
+1. **Brief.** A single input page with brand name, about the brand, product details, product photos (optional, up to 6) and campaign goal. Links, platforms, audience and video length sit in one optional, collapsed section. **Click: Create Campaign.**
+2. **Results.** One page holds the whole campaign:
+   - **Three concept cards** at the top, each with a title, a one-sentence idea and a preview image from your photos. The first concept is selected automatically. **Click another concept** and the storyboard and all details update in place.
+   - **A storyboard of 4–6 shots.** Each shot shows a product photo (where the shot features the product), a short description and its duration. Click a shot to edit it in a compact dialog: image, title, description, on-screen text, seconds, reorder and delete.
+   - **More details**, collapsed: hooks and captions, production notes (camera, setting, direction), look and sound, and your brief with saved links.
+   - **Export Campaign** is the one primary action. It downloads a Markdown treatment of the chosen concept, with the other two summarised. **Click: Export.**
+   - Edit brief, Save, Regenerate, Download project file and New campaign live in a small **⋯** menu. Projects also save automatically in the browser.
+
+![Brief](docs/screenshot-brief.jpg)
+![Shot editor](docs/screenshot-shot-editor.jpg)
+
+---
+
+## Demo mode: what it does and doesn't do
+
+The demo engine (`src/lib/demo/`) is **transparent keyword matching**, not AI:
+
+- `analyze.ts` looks for words in the brief that indicate category, style signals (for example sustainable, handmade, playful, minimal, performance) and goal type. It takes a short product phrase straight from the user's own description.
+- `archetypes.ts` holds seven *filming formats*: Product Portrait, In Real Life, Close Up, How It's Made, After Dark, In Motion and Out of Place. It scores them against the brief and picks three. *How It's Made* is only offered when the brief itself mentions craft, sustainability or heritage.
+- `index.ts` fills in the brand and product names, fits the shots to the chosen video length, and writes hooks and captions for each platform.
+
+**Guardrails**
+
+- Copy refers only to what the user typed plus generic production direction. It never invents materials, processes, availability or backstories, and a test enforces this.
+- Results are labelled "Demo · rule-based", with a one-line explanation. The brief notes list which words were matched.
+- Photos and links are always described as references that were *not analysed* or *not opened*.
+
+### Limitations
 
 | | |
 |---|---|
-| **Brief → 3 concepts** | Structured brief (brand, collection, audience, goal, tone, platforms, notes) with validation and three one-click sample briefs. |
-| **Two generation modes** | **Demo:** a local, brief-aware generator that needs no key. **Live:** Claude generates the campaign on the server using structured outputs. |
-| **Editable storyboards** | Frame cards with visual, audio, on-screen text and duration. Edit any text in place, reorder, insert and delete frames. Runtime totals update as you edit. |
-| **Shot lists** | A production table (shot type, description, camera/lens, location, talent, seconds) with the same editing controls. |
-| **Social captions** | One caption per platform, with character counts, editable hashtags, copy to clipboard, and add or remove per platform. |
-| **Project saving** | Save to browser storage, reopen, rename, delete, and import projects. Changes in other tabs stay in sync, and you get a warning before leaving with unsaved changes. |
-| **Export** | A client-ready **Markdown** treatment, or **JSON** that you can import again. |
-| **Error handling** | Validation on both client and server, typed error codes, friendly messages, a one-click demo fallback when live mode fails, and an error-tolerant storage layer. |
-| **Polish** | Editorial design, responsive layout down to 360px, keyboard and screen-reader labels, and support for reduced motion. |
+| **Photos** | Kept in browser memory only. They are never uploaded or analysed, and previews disappear after a refresh. File names are saved, and reopened projects show placeholders until you re-attach the photos via *Edit brief*. |
+| **Links** | Saved, shown and exported, but never fetched. |
+| **Storage** | Projects autosave to this browser's `localStorage` (up to 50). Use *Download project file* to back up or move a project. |
 
-<details>
-<summary>More screenshots</summary>
+---
 
-![Brief](docs/screenshot-brief.png)
-![Storyboard editor](docs/screenshot-storyboard.png)
+## Path to real AI
 
-</details>
+Set `ANTHROPIC_API_KEY` on the server and the **Live AI** toggle unlocks. `/api/generate` then calls Claude (`claude-opus-5-5` by default) with structured outputs that match the same campaign schema, so the UI stays the same. The prompt asks Claude to use only facts from the brief and never to claim it has seen links or photos.
+
+Next steps: send product photos to a vision model, summarise reference links on the server, and add cloud storage with accounts.
 
 ---
 
@@ -46,93 +71,54 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. Demo mode works right away.
+Open http://localhost:3000.
 
-### Enable live Claude generation
+Optional live mode:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Set `ANTHROPIC_API_KEY` in `.env.local` ([get a key](https://console.anthropic.com/)), then restart `npm run dev`. The **Live · Claude** toggle in the header turns on automatically.
-
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | For live mode | — | Server-side Claude API key. Never exposed to the browser. |
-| `ANTHROPIC_MODEL` | No | `claude-opus-5-5` | Override the model. |
-| `LIVE_RATE_LIMIT_PER_HOUR` | No | `10` | Live generations allowed per IP per hour. |
-
-### Scripts
+| `ANTHROPIC_API_KEY` | Live mode only | — | Server-side key, never sent to the browser |
+| `ANTHROPIC_MODEL` | No | `claude-opus-5-5` | Model override |
+| `LIVE_RATE_LIMIT_PER_HOUR` | No | `10` | Live generations per IP per hour |
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Start the dev server |
+| `npm run dev` | Dev server |
 | `npm run build` / `npm start` | Production build / serve |
-| `npm test` | Run the Vitest suite once |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint (Next.js config) |
+| `npm test` | Vitest suite |
+| `npm run typecheck` / `npm run lint` | Type check / ESLint |
 
 ---
 
 ## Architecture
 
 ```
-Browser (client components)                    Server (Next.js route handlers)
-┌──────────────────────────────┐               ┌──────────────────────────────────────┐
-│ Studio ── BriefForm          │  POST          │ /api/generate                        │
-│   │       ConceptCards       │  {brief,mode}  │  ├ size limit + JSON parse           │
-│   │       ConceptWorkspace   │ ─────────────▶ │  ├ Zod validation (BriefSchema)      │
-│   │        ├ Storyboard      │                │  ├ mode=demo → generateDemoCampaign  │
-│   │        ├ Shot list       │                │  └ mode=live → rate limit →          │
-│   │        └ Captions        │ ◀───────────── │       generateWithClaude (server-only)│
-│   ├ editorReducer (pure)     │  {campaign} or │         ├ Claude structured outputs   │
-│   ├ storage (localStorage)   │  {error:{code}}│         ├ normalize + validate        │
-│   └ export (Markdown / JSON) │                │         └ typed error mapping         │
-└──────────────────────────────┘               │ /api/status → { liveAvailable, model }│
-                                               └──────────────────────────────────────┘
-```
-
-```
 src/
-├─ app/
-│  ├─ api/generate/route.ts   # generation endpoint (demo + live)
-│  ├─ api/status/route.ts     # tells the UI whether live mode is configured
-│  ├─ layout.tsx, page.tsx, globals.css
-├─ components/                # Studio (state orchestration), BriefForm, Header,
-│                             # ConceptCards, ConceptWorkspace, ProjectsDrawer, ui
-├─ lib/
-│  ├─ schema.ts               # Zod schemas = single source of truth for types
-│  ├─ demo.ts                 # deterministic demo generator
-│  ├─ prompt.ts               # system prompt, user prompt, Claude output schema
-│  ├─ normalize.ts            # model output → validated Campaign
-│  ├─ editor.ts               # pure reducer for all editing operations
-│  ├─ storage.ts              # validated localStorage persistence
-│  ├─ export.ts, api-client.ts, samples.ts, id.ts
-│  └─ server/
-│     ├─ claude.ts            # Anthropic SDK integration (imports "server-only")
-│     ├─ rate-limit.ts        # per-IP limiter for the paid endpoint
-│     └─ http.ts
-└─ test/                      # setup + shared fixtures
+├─ app/api/generate, app/api/status   # demo + live generation; live-mode status
+├─ components/
+│  ├─ Studio.tsx                      # brief → results, photos, autosave, projects
+│  ├─ brief/                          # BriefForm, PhotoUploader, LinkListInput
+│  └─ results/                        # Results, ConceptPicker, Storyboard,
+│                                     # ShotEditor, MoreDetails, ActionsMenu
+└─ lib/
+   ├─ schema.ts                       # Zod schemas (single source of truth)
+   ├─ demo/                           # rule-based demo engine
+   ├─ editor.ts                       # pure reducer for all edits
+   ├─ photos.ts, links.ts             # validation, shot↔photo assignment, link labels
+   ├─ storage.ts, export.ts           # validated localStorage, Markdown export
+   └─ prompt.ts, normalize.ts, server/  # Claude integration (server-only)
 ```
 
-### Key decisions
+**Key decisions**
 
-- **Zod at every boundary.** The HTTP body, Claude's output and stored projects are all validated against the same schemas in `lib/schema.ts`. TypeScript types are inferred from those schemas, so types and runtime checks cannot drift apart.
-- **Structured outputs instead of parsing prose.** `generateWithClaude` calls `client.beta.messages.stream()` with `output_config.format` built from a Zod schema (`betaZodOutputFormat`). The response is guaranteed to be JSON matching that schema. It streams to avoid HTTP timeouts on long generations, then reads `finalMessage().parsed_output`.
-- **Post-validation for what JSON Schema can't express.** `normalize.ts` makes sure there are exactly three concepts, fixes hex colours, clamps durations, normalises hashtags, removes captions for platforms that weren't requested, and assigns ids.
-- **Safe failure modes.** `stop_reason` is checked for `refusal` and `max_tokens`. SDK errors are mapped by type (`AuthenticationError`, `RateLimitError`, `APIConnectionError`, …) to stable `ApiErrorCode`s with friendly messages, and raw upstream messages never reach the client. The server-side refusal fallback (`fallbacks: "default"`) is enabled for models that support it.
-- **Prompt-injection hygiene.** The brief is wrapped in tags, angle brackets are removed, and the system prompt tells Claude to treat the brief as data.
-- **Demo mode is a real code path.** It goes through the same API route and schema as live mode, and it is deterministic, which makes it a stable test fixture.
-- **Editing is a pure reducer.** Every storyboard, shot and caption operation lives in `editorReducer`, so each one is unit-tested without a DOM.
-- **Saving without a database.** Projects live in `localStorage`, behind a small, validated, injectable storage interface, so there is nothing to provision for a demo deployment. Moving to a server store (Postgres, Vercel KV, …) means replacing `lib/storage.ts`.
-
-### Security
-
-- `ANTHROPIC_API_KEY` is read only in `lib/server/claude.ts`, which imports `server-only`, so the build fails if it is ever bundled for the client. `/api/status` reports only whether a key exists.
-- The request body is limited to 16 KB, and every brief field has a length cap.
-- The live endpoint is rate-limited per IP (10 per hour by default). The limiter keeps its counts in memory on each instance. For multi-region production traffic, replace it with Upstash or Vercel KV.
-- Baseline security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`) are set in `next.config.ts`. The `X-Powered-By` header is turned off.
+- **One shot list per concept.** Each shot is both a storyboard frame and a production note, so choosing a concept updates the storyboard, production notes and social copy together, and they can never drift apart.
+- **Zod at every boundary.** The request body, model output, saved projects and imported files are all validated against the schemas.
+- **Accessible.** Fields have real labels, focus moves to the first invalid field, the concept picker is a radio group, the shot editor is a modal dialog that closes with Escape, and reduced-motion preferences are respected.
+- **Secure.** The API key is server-only, request bodies are size-capped, live calls are rate-limited, the brief can't override the prompt instructions, and external links open with `rel="noopener noreferrer"`.
 
 ---
 
@@ -142,59 +128,24 @@ src/
 npm test
 ```
 
-There are **71 tests across 11 files**:
+There are **108 tests across 13 files**. They cover:
 
-| Area | File(s) |
-|---|---|
-| Schemas & validation | `lib/schema.test.ts` |
-| Demo generator (shape, personalisation, determinism, unique ids) | `lib/demo.test.ts` |
-| Claude output normalisation | `lib/normalize.test.ts` |
-| Prompt construction & injection hygiene | `lib/prompt.test.ts` |
-| Editor reducer (update, insert, move, delete) | `lib/editor.test.ts` |
-| Storage (corruption, quota, caps, import) | `lib/storage.test.ts` |
-| Markdown export | `lib/export.test.ts` |
-| Claude integration with a fake SDK client (params, refusals, truncation, error mapping) | `lib/server/claude.test.ts` |
-| Rate limiter | `lib/server/rate-limit.test.ts` |
-| API route (demo, validation, 413, 503, live, typed errors, 429) | `app/api/generate/route.test.ts` |
-| UI integration in jsdom (validate → generate → edit → save → reopen, error fallback) | `components/Studio.test.tsx` |
+- schemas and link handling
+- the demo engine (format selection, 4–6 shots that add up exactly to the video length, no invented claims, honest wording about photos and links)
+- photo assignment, the editor reducer, storage and export
+- Claude normalisation and error mapping (against a fake SDK client)
+- the API route
+- jsdom UI tests:
+  - brief → campaign → compare concepts → export in **three clicks**
+  - inline shot editing with autosave
+  - the More details section and the secondary menu
+  - reopening a project after a reload
+  - the live-mode error fallback
 
-The test suite never calls the real Claude API. CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and a production build on every PR.
+CI runs lint, typecheck, tests and a production build on every pull request.
 
 ---
 
 ## Deploying to Vercel
 
-1. **Push** the repository to GitHub.
-2. In Vercel, go to **[Add New → Project](https://vercel.com/new)** and import the repo. The Next.js framework is detected automatically, and no build settings need to change.
-3. **Optional, for live mode:** under **Settings → Environment Variables**, add `ANTHROPIC_API_KEY`. You can also add `ANTHROPIC_MODEL` and `LIVE_RATE_LIMIT_PER_HOUR`. Apply them to Production and, if you like, Preview.
-4. **Deploy.** Without a key, the deployment runs in demo-only mode and the Live toggle is disabled with a tooltip. That makes it safe to share a public recruiter link.
-5. After you add or change environment variables, **redeploy** so they take effect.
-
-Notes:
-- `/api/generate` sets `maxDuration = 120` seconds. That is within the default Fluid Compute limits on all Vercel plans. If you have turned Fluid Compute off on the Hobby plan, lower it to 60.
-- Prefer the CLI?
-
-  ```bash
-  npm i -g vercel
-  ```
-
-  ```bash
-  vercel
-  ```
-
-  ```bash
-  vercel env add ANTHROPIC_API_KEY
-  ```
-
-  ```bash
-  vercel --prod
-  ```
-
----
-
-## Roadmap ideas
-
-- Regenerate a single concept or section, and stream partial results into the UI
-- Image moodboards for each storyboard frame
-- Cloud project storage with authentication, plus shareable read-only links
-- PDF treatment export
+Import the repository at [vercel.com/new](https://vercel.com/new); Next.js is detected automatically. Optionally add `ANTHROPIC_API_KEY` under **Settings → Environment Variables**. Without it the site runs in demo mode only, which is safe to share publicly. Every pull request gets its own Preview deployment, so you can review changes before merging.

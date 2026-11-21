@@ -1,6 +1,6 @@
 import { createId } from "./id";
 import type { GeneratedCampaign } from "./prompt";
-import { CampaignSchema, type Brief, type Campaign } from "./schema";
+import { CampaignSchema, MAX_SHOTS, campaignPlatforms, type Brief, type Campaign } from "./schema";
 
 export class InvalidGenerationError extends Error {
   constructor(message: string) {
@@ -11,7 +11,7 @@ export class InvalidGenerationError extends Error {
 
 const HEX = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
 
-function normalizeHex(input: string): string | null {
+export function normalizeHex(input: string): string | null {
   const m = input.trim().match(HEX);
   if (!m) return null;
   let hex = m[1];
@@ -21,7 +21,7 @@ function normalizeHex(input: string): string | null {
 
 function clampDuration(n: number): number {
   if (!Number.isFinite(n)) return 3;
-  return Math.min(120, Math.max(0, Math.round(n * 10) / 10));
+  return Math.min(60, Math.max(0, Math.round(n * 2) / 2));
 }
 
 function normalizeTag(tag: string): string {
@@ -32,8 +32,7 @@ function normalizeTag(tag: string): string {
 
 /**
  * Turns raw model output into a validated `Campaign`: assigns ids, repairs
- * small formatting issues (hex codes, hashtags, durations), drops captions for
- * platforms that weren't requested and enforces exactly three concepts.
+ * small formatting issues and enforces exactly three concepts with shots.
  */
 export function normalizeGeneratedCampaign(
   raw: GeneratedCampaign,
@@ -42,57 +41,39 @@ export function normalizeGeneratedCampaign(
   idFactory: (prefix: string) => string = createId,
 ): Campaign {
   if (raw.concepts.length < 3) {
-    throw new InvalidGenerationError(
-      `Expected 3 concepts but the model returned ${raw.concepts.length}.`,
-    );
+    throw new InvalidGenerationError(`Expected 3 concepts but the model returned ${raw.concepts.length}.`);
   }
-
-  const allowed = new Set(brief.platforms);
+  const allowed = new Set(campaignPlatforms(brief));
 
   const concepts = raw.concepts.slice(0, 3).map((c) => ({
     id: idFactory("concept"),
     title: c.title.trim(),
-    tagline: c.tagline.trim(),
-    bigIdea: c.bigIdea.trim(),
-    visualDirection: c.visualDirection.trim(),
-    soundtrack: c.soundtrack.trim(),
+    idea: c.idea.trim(),
+    rationale: c.rationale.trim(),
+    look: c.look,
+    music: c.music.trim(),
     palette: c.palette.flatMap((s) => {
       const hex = normalizeHex(s.hex);
       return hex ? [{ name: s.name.trim() || hex, hex }] : [];
     }),
-    storyboard: c.storyboard.map((f) => ({
-      ...f,
-      id: idFactory("frame"),
-      durationSec: clampDuration(f.durationSec),
-    })),
-    shotList: c.shotList.map((s) => ({
-      ...s,
-      id: idFactory("shot"),
-      durationSec: clampDuration(s.durationSec),
-    })),
+    shots: c.shots.slice(0, MAX_SHOTS).map((s) => ({ ...s, id: idFactory("shot"), durationSec: clampDuration(s.durationSec) })),
+    hooks: c.hooks.filter((h) => h.platform === "tiktok" || h.platform === "instagram").map((h) => ({ ...h, id: idFactory("hook") })),
     captions: c.captions
       .filter((cap) => allowed.has(cap.platform))
-      .map((cap) => ({
-        ...cap,
-        id: idFactory("caption"),
-        hashtags: cap.hashtags.map(normalizeTag).filter(Boolean),
-      })),
+      .map((cap) => ({ ...cap, id: idFactory("caption"), hashtags: cap.hashtags.map(normalizeTag).filter(Boolean) })),
   }));
 
   for (const c of concepts) {
-    if (c.storyboard.length === 0 || c.shotList.length === 0) {
-      throw new InvalidGenerationError(`Concept "${c.title}" is missing a storyboard or shot list.`);
-    }
+    if (c.shots.length === 0) throw new InvalidGenerationError(`Concept "${c.title}" has no shots.`);
   }
 
   const result = CampaignSchema.safeParse({
+    read: { ...raw.read, notes: [] },
     concepts,
     source: "claude",
     model,
     generatedAt: new Date().toISOString(),
   });
-  if (!result.success) {
-    throw new InvalidGenerationError(result.error.issues[0]?.message ?? "Invalid campaign");
-  }
+  if (!result.success) throw new InvalidGenerationError(result.error.issues[0]?.message ?? "Invalid campaign");
   return result.data;
 }

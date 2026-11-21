@@ -3,7 +3,7 @@ import { generateDemoCampaign } from "./demo";
 import { editorReducer, totalDuration } from "./editor";
 import { brief, sequentialIds } from "@/test/fixtures";
 
-const initial = generateDemoCampaign(brief, sequentialIds()).concepts;
+const initial = generateDemoCampaign(brief, { idFactory: sequentialIds() }).concepts;
 const c = initial[0];
 
 describe("editorReducer", () => {
@@ -14,46 +14,33 @@ describe("editorReducer", () => {
     expect(next[1]).toBe(initial[1]);
   });
 
-  it("updates a single storyboard frame", () => {
-    const f = c.storyboard[1];
-    const next = editorReducer(initial, {
-      type: "updateItem",
-      conceptId: c.id,
-      list: "storyboard",
-      itemId: f.id,
-      patch: { visual: "Changed" },
-    });
-    expect(next[0].storyboard[1].visual).toBe("Changed");
-    expect(next[0].storyboard[0]).toBe(c.storyboard[0]);
+  it("updates a single shot, including its image choice", () => {
+    const s = c.shots[1];
+    const next = editorReducer(initial, { type: "updateItem", conceptId: c.id, list: "shots", itemId: s.id, patch: { description: "Changed", photoId: "p1" } });
+    expect(next[0].shots[1]).toMatchObject({ description: "Changed", photoId: "p1" });
+    expect(next[0].shots[0]).toBe(c.shots[0]);
   });
 
-  it("inserts an item after a given id, or appends", () => {
-    const after = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "storyboard", afterId: c.storyboard[0].id });
-    expect(after[0].storyboard).toHaveLength(c.storyboard.length + 1);
-    expect(after[0].storyboard[1].title).toBe("New frame");
-
-    const appended = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "shotList" });
-    expect(appended[0].shotList.at(-1)?.shotType).toBe("Medium");
+  it("adds a shot with a known id so it can be edited straight away", () => {
+    const next = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "shots", id: "shot_new" });
+    expect(next[0].shots.at(-1)).toMatchObject({ id: "shot_new", title: "New shot", durationSec: 3 });
   });
 
-  it("adds a caption for a specific platform", () => {
-    const next = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "captions", platform: "youtube" });
-    expect(next[0].captions.at(-1)?.platform).toBe("youtube");
+  it("adds hooks and captions for a platform", () => {
+    const hooks = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "hooks", platform: "tiktok" });
+    expect(hooks[0].hooks.at(-1)).toMatchObject({ platform: "tiktok", text: "" });
+    const caps = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "captions", platform: "youtube" });
+    expect(caps[0].captions.at(-1)?.platform).toBe("youtube");
   });
 
-  it("removes items", () => {
-    const id = c.shotList[0].id;
-    const next = editorReducer(initial, { type: "removeItem", conceptId: c.id, list: "shotList", itemId: id });
-    expect(next[0].shotList.find((s) => s.id === id)).toBeUndefined();
-  });
+  it("removes and moves items, ignoring out-of-bounds moves", () => {
+    const [a, b] = c.shots;
+    const removed = editorReducer(initial, { type: "removeItem", conceptId: c.id, list: "shots", itemId: a.id });
+    expect(removed[0].shots[0].id).toBe(b.id);
 
-  it("moves items and ignores out-of-bounds moves", () => {
-    const [a, b] = c.storyboard;
-    const down = editorReducer(initial, { type: "moveItem", conceptId: c.id, list: "storyboard", itemId: a.id, direction: 1 });
-    expect(down[0].storyboard.slice(0, 2).map((f) => f.id)).toEqual([b.id, a.id]);
-
-    const up = editorReducer(initial, { type: "moveItem", conceptId: c.id, list: "storyboard", itemId: a.id, direction: -1 });
-    expect(up[0]).toBe(initial[0]);
+    const moved = editorReducer(initial, { type: "moveItem", conceptId: c.id, list: "shots", itemId: a.id, direction: 1 });
+    expect(moved[0].shots.slice(0, 2).map((s) => s.id)).toEqual([b.id, a.id]);
+    expect(editorReducer(initial, { type: "moveItem", conceptId: c.id, list: "shots", itemId: a.id, direction: -1 })[0]).toBe(initial[0]);
   });
 
   it("resets", () => {

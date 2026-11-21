@@ -37,10 +37,10 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const { brief, mode } = parsed.data;
+  const { brief, mode, photoCount } = parsed.data;
 
   if (mode === "demo") {
-    const body: GenerateResponseBody = { campaign: generateDemoCampaign(brief) };
+    const body: GenerateResponseBody = { campaign: generateDemoCampaign(brief, { photoCount }) };
     return Response.json(body);
   }
 
@@ -64,7 +64,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const body: GenerateResponseBody = { campaign: await generateWithClaude(brief) };
+    const body: GenerateResponseBody = { campaign: await generateWithClaude(brief, photoCount) };
     return Response.json(body);
   } catch (err) {
     const e = err instanceof GenerationError ? err : new GenerationError("UPSTREAM_ERROR", 500, "Unexpected error.");

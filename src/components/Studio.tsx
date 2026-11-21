@@ -5,8 +5,8 @@ import { ApiError, fetchStatus, requestCampaign } from "@/lib/api-client";
 import { editorReducer, type EditorAction } from "@/lib/editor";
 import { downloadFile, projectToMarkdown, slugify } from "@/lib/export";
 import { createId } from "@/lib/id";
-import { EMPTY_BRIEF } from "@/lib/samples";
-import { BriefSchema, PLATFORM_LABELS, type BriefInput, type Campaign, type Project } from "@/lib/schema";
+import { toPhotoItem, toPhotoMeta, validatePhotoFiles, type PhotoItem } from "@/lib/photos";
+import { BriefSchema, EMPTY_BRIEF, type Brief, type BriefInput, type Campaign, type Project } from "@/lib/schema";
 import {
   deleteProject,
   getProjectsSnapshot,
@@ -16,15 +16,14 @@ import {
   StorageError,
   subscribeProjects,
 } from "@/lib/storage";
-import { BriefForm } from "./BriefForm";
-import { ConceptCards } from "./ConceptCards";
-import { ConceptWorkspace } from "./ConceptWorkspace";
-import { GeneratingState } from "./GeneratingState";
+import { BriefForm } from "./brief/BriefForm";
 import { Header } from "./Header";
 import { ProjectsDrawer } from "./ProjectsDrawer";
-import { Button, EditableText, Icons, cx } from "./ui";
+import { Results, ResultsSkeleton } from "./results/Results";
+import { Button, Icons, cx } from "./ui";
 
 type Mode = "demo" | "live";
+type Phase = "brief" | "loading" | "results";
 type Meta = Omit<Campaign, "concepts">;
 
 interface ErrorState {
@@ -33,40 +32,51 @@ interface ErrorState {
 }
 
 const MODE_KEY = "acd.mode";
+/** Short, deliberate pause in demo mode so the transition reads as "working". */
+const DEMO_MIN_MS = 700;
+const AUTOSAVE_MS = 600;
 
 function defaultName(brief: BriefInput) {
-  return [brief.brandName, brief.collection].filter(Boolean).join(" — ") || "Untitled campaign";
+  return brief.brandName?.trim() ? `${brief.brandName.trim()} campaign` : "Untitled campaign";
 }
 
 export function Studio() {
+  const [phase, setPhase] = useState<Phase>("brief");
   const [brief, setBrief] = useState<BriefInput>(EMPTY_BRIEF);
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const urlCache = useRef(new Map<string, string>());
+
   const [mode, setMode] = useState<Mode>("demo");
   const [status, setStatus] = useState({ liveAvailable: false, model: "" });
 
   const [concepts, rawDispatch] = useReducer(editorReducer, []);
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [briefUsed, setBriefUsed] = useState<BriefInput | null>(null);
-  const [selectedId, setSelectedId] = useState<string>();
+  const [briefUsed, setBriefUsed] = useState<Brief | null>(null);
+  const [selectedId, setSelectedId] = useState("");
 
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState("");
   const [createdAt, setCreatedAt] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [saveStatus, setSaveStatus] = useState("");
 
   const projects = useSyncExternalStore(subscribeProjects, getProjectsSnapshot, getServerProjectsSnapshot);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [briefOpen, setBriefOpen] = useState(false);
 
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
 
-  const dispatch = useCallback((action: EditorAction) => {
-    rawDispatch(action);
-    if (action.type !== "reset") setDirty(true);
-  }, []);
+  const hasCampaign = concepts.length > 0 && meta !== null && briefUsed !== null;
+  const touch = useCallback(() => setRevision((r) => r + 1), []);
+
+  const dispatch = useCallback(
+    (action: EditorAction) => {
+      rawDispatch(action);
+      if (action.type !== "reset") touch();
+    },
+    [touch],
+  );
 
   /* --------------------------- bootstrap ----------------------------- */
   useEffect(() => {
@@ -84,16 +94,9 @@ export function Studio() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
+    const t = setTimeout(() => setToast(null), 2400);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
 
   function changeMode(m: Mode) {
     setMode(m);
@@ -104,53 +107,15 @@ export function Studio() {
     }
   }
 
-  /* --------------------------- actions ------------------------------- */
-  async function generate(useMode: Mode = mode) {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoading(true);
-    setError(null);
-    setBriefOpen(false);
-
-    try {
-      const started = Date.now();
-      const campaign = await requestCampaign(brief, useMode, controller.signal);
-      // Give demo mode a brief, intentional "thinking" beat.
-      if (useMode === "demo") await new Promise((r) => setTimeout(r, Math.max(0, 1100 - (Date.now() - started))));
-      if (controller.signal.aborted) return;
-
-      const { concepts: next, ...rest } = campaign;
-      rawDispatch({ type: "reset", concepts: next });
-      setMeta(rest);
-      setBriefUsed(brief);
-      setSelectedId(next[0]?.id);
-      if (!projectId) {
-        setProjectName(defaultName(brief));
-      }
-      setDirty(true);
-      requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    } catch (err) {
-      if ((err as Error)?.name === "AbortError") return;
-      const e = err instanceof ApiError ? err : new ApiError("UPSTREAM_ERROR", "Something went wrong.");
-      setError({
-        message: e.message,
-        canFallBackToDemo: useMode === "live",
-      });
-    } finally {
-      if (abortRef.current === controller) setLoading(false);
-    }
-  }
-
-  function buildProject(): Project | null {
-    if (!meta || !briefUsed) return null;
-    const parsedBrief = BriefSchema.safeParse(briefUsed);
-    if (!parsedBrief.success) return null;
+  /* ---------------------------- project -------------------------------- */
+  const buildProject = useCallback((): Project | null => {
+    if (!meta || !briefUsed || !projectId) return null;
     const now = new Date().toISOString();
     return {
-      id: projectId ?? createId("project"),
+      id: projectId,
       name: projectName.trim() || defaultName(briefUsed),
-      brief: parsedBrief.data,
+      brief: briefUsed,
+      photos: photos.map(toPhotoMeta),
       campaign: {
         ...meta,
         concepts: concepts.map((c) => ({
@@ -162,67 +127,134 @@ export function Studio() {
       createdAt: createdAt ?? now,
       updatedAt: now,
     };
+  }, [meta, briefUsed, projectId, projectName, photos, concepts, selectedId, createdAt]);
+
+  const persist = useCallback(
+    (announce: boolean) => {
+      const project = buildProject();
+      if (!project) return;
+      try {
+        saveProject(project);
+        if (!createdAt) setCreatedAt(project.createdAt);
+        setSaveStatus("Saved in this browser");
+        if (announce) setToast("Saved");
+      } catch (err) {
+        setSaveStatus("Not saved");
+        setError({
+          message: err instanceof StorageError ? err.message : "Could not save the project.",
+          canFallBackToDemo: false,
+        });
+      }
+    },
+    [buildProject, createdAt],
+  );
+
+  // Autosave shortly after any change to the campaign.
+  useEffect(() => {
+    if (!hasCampaign || revision === 0) return;
+    const t = setTimeout(() => persist(false), AUTOSAVE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `revision` is the change signal
+  }, [revision, hasCampaign]);
+
+  /* ---------------------------- photos -------------------------------- */
+  function addPhotos(files: File[]): string[] {
+    const { accepted, errors } = validatePhotoFiles(files, photos.length);
+    const items = accepted.map((f) => toPhotoItem(f));
+    for (const p of items) if (p.url) urlCache.current.set(p.id, p.url);
+    if (items.length) {
+      setPhotos((prev) => [...prev, ...items]);
+      if (hasCampaign) touch();
+    }
+    return errors;
   }
 
-  function save() {
-    const project = buildProject();
-    if (!project) return;
+  function removePhoto(id: string) {
+    setPhotos((prev) => prev.filter((p) => p.id !== id));
+    if (hasCampaign) touch();
+  }
+
+  /* --------------------------- generation ----------------------------- */
+  async function generate(useMode: Mode = mode) {
+    const parsed = BriefSchema.safeParse(brief);
+    if (!parsed.success) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const previous: Phase = hasCampaign ? "results" : "brief";
+    setPhase("loading");
+    setError(null);
+    window.scrollTo({ top: 0 });
+
     try {
-      saveProject(project);
-      setProjectId(project.id);
-      setCreatedAt(project.createdAt);
-      setDirty(false);
-      setToast("Project saved");
+      const started = Date.now();
+      const campaign = await requestCampaign(brief, useMode, photos.length, controller.signal);
+      if (useMode === "demo") await new Promise((r) => setTimeout(r, Math.max(0, DEMO_MIN_MS - (Date.now() - started))));
+      if (controller.signal.aborted) return;
+
+      const { concepts: next, ...rest } = campaign;
+      rawDispatch({ type: "reset", concepts: next });
+      setMeta(rest);
+      setBriefUsed(parsed.data);
+      setSelectedId(next[0]?.id ?? "");
+      if (!projectId) {
+        setProjectId(createId("project"));
+        setCreatedAt(null);
+      }
+      if (!projectName) setProjectName(defaultName(brief));
+      setPhase("results");
+      touch();
     } catch (err) {
-      setError({
-        message: err instanceof StorageError ? err.message : "Could not save the project.",
-        canFallBackToDemo: false,
-      });
+      if ((err as Error)?.name === "AbortError") return;
+      const e = err instanceof ApiError ? err : new ApiError("UPSTREAM_ERROR", "Something went wrong. Please try again.");
+      setError({ message: e.message, canFallBackToDemo: useMode === "live" });
+      setPhase(previous === "results" ? "results" : "brief");
     }
   }
 
+  /* ---------------------------- projects ------------------------------ */
   function openProject(p: Project) {
-    if (dirty && !window.confirm("Discard unsaved changes to the current campaign?")) return;
     abortRef.current?.abort();
-    setLoading(false);
     const { concepts: cs, ...rest } = p.campaign;
     rawDispatch({ type: "reset", concepts: cs });
     setMeta(rest);
     setBrief(p.brief);
     setBriefUsed(p.brief);
-    setSelectedId(p.selectedConceptId ?? cs[0]?.id);
+    setPhotos(p.photos.map((m) => ({ ...m, url: urlCache.current.get(m.id) })));
+    setSelectedId(p.selectedConceptId ?? cs[0]?.id ?? "");
     setProjectId(p.id);
     setProjectName(p.name);
     setCreatedAt(p.createdAt);
-    setDirty(false);
+    setRevision(0);
+    setSaveStatus("Saved in this browser");
     setError(null);
     setDrawerOpen(false);
+    setPhase("results");
+    window.scrollTo({ top: 0 });
   }
 
   function newCampaign() {
-    if (dirty && !window.confirm("Discard unsaved changes and start a new campaign?")) return;
     abortRef.current?.abort();
-    setLoading(false);
     rawDispatch({ type: "reset", concepts: [] });
     setMeta(null);
     setBriefUsed(null);
-    setSelectedId(undefined);
+    setSelectedId("");
     setProjectId(null);
     setProjectName("");
     setCreatedAt(null);
+    setRevision(0);
+    setSaveStatus("");
     setBrief(EMPTY_BRIEF);
-    setDirty(false);
+    setPhotos([]);
     setError(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setPhase("brief");
+    window.scrollTo({ top: 0 });
   }
 
   function remove(id: string) {
     deleteProject(id);
-    if (id === projectId) {
-      setProjectId(null);
-      setCreatedAt(null);
-      setDirty(true);
-    }
+    if (id === projectId) setSaveStatus("Deleted from this browser");
   }
 
   async function importFile(file: File) {
@@ -245,15 +277,12 @@ export function Studio() {
     const base = slugify(p.name);
     if (kind === "md") downloadFile(`${base}.md`, projectToMarkdown(p), "text/markdown;charset=utf-8");
     else downloadFile(`${base}.json`, JSON.stringify(p, null, 2), "application/json");
+    setToast(kind === "md" ? "Campaign exported" : "Project file downloaded");
   }
 
-  /* --------------------------- render -------------------------------- */
-  const hasResults = concepts.length > 0 && meta;
-  const selectedIndex = Math.max(0, concepts.findIndex((c) => c.id === selectedId));
-  const selected = concepts[selectedIndex];
-
+  /* ----------------------------- render -------------------------------- */
   return (
-    <div className="relative z-10">
+    <div className="relative">
       <Header
         mode={mode}
         onModeChange={changeMode}
@@ -264,146 +293,93 @@ export function Studio() {
         onNew={newCampaign}
       />
 
-      <main className="mx-auto max-w-7xl px-4 pb-24 sm:px-6">
-        {/* Hero + brief */}
-        {!hasResults && (
-          <section className="grid gap-10 pt-12 lg:grid-cols-[1fr_1.15fr] lg:gap-16 lg:pt-20">
-            <div className="animate-fade-up">
-              <p className="mb-5 inline-flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-accent">
-                <Icons.Sparkle className="h-3 w-3" /> Fashion campaign studio
-              </p>
-              <h1 className="font-display text-5xl leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
-                From brief to <em className="text-accent">campaign</em> in one sitting.
-              </h1>
-              <p className="mt-6 max-w-md text-lg leading-relaxed text-ink/70">
-                Describe the brand and the moment. Your AI creative director returns three distinct concepts — each
-                with a storyboard, a production-ready shot list and platform-native captions you can edit, save and
-                export.
-              </p>
-              <dl className="mt-10 grid max-w-md grid-cols-3 gap-6 border-t border-line pt-6">
-                {[
-                  ["3", "Concepts"],
-                  ["4", "Deliverables each"],
-                  [String(Object.keys(PLATFORM_LABELS).length), "Platforms"],
-                ].map(([n, l]) => (
-                  <div key={l}>
-                    <dt className="text-[10px] uppercase tracking-[0.2em] text-muted">{l}</dt>
-                    <dd className="font-display text-3xl">{n}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            <div className="animate-fade-up rounded-3xl bg-paper/90 p-6 ring-1 ring-line shadow-[0_40px_100px_-60px_rgba(21,20,18,0.6)] [animation-delay:120ms] sm:p-8">
-              <h2 className="mb-1 font-display text-2xl">The brief</h2>
-              <p className="mb-6 text-sm text-muted">Tell us about the brand, the collection and the goal.</p>
-              <BriefForm value={brief} onChange={setBrief} onSubmit={() => generate()} loading={loading} mode={mode} />
-            </div>
-          </section>
-        )}
-
+      <main className="min-h-[calc(100vh-3.5rem)]">
         {error && (
-          <div
-            role="alert"
-            className="mt-8 flex flex-wrap items-start gap-3 rounded-2xl border border-red-200 bg-red-50/80 p-4 text-sm text-red-900"
-          >
-            <Icons.Alert className="mt-0.5 h-4 w-4 shrink-0" />
-            <p className="min-w-0 flex-1">{error.message}</p>
-            <div className="flex gap-2">
-              {error.canFallBackToDemo && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    changeMode("demo");
-                    generate("demo");
-                  }}
-                >
-                  Use demo mode
-                </Button>
-              )}
-              <Button size="sm" variant="ghost" onClick={() => setError(null)}>
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {loading && (
-          <div className="mt-12">
-            <GeneratingState mode={mode} />
-          </div>
-        )}
-
-        {/* Results */}
-        {hasResults && !loading && (
-          <div ref={resultsRef} className="scroll-mt-20 pt-8">
-            <div className="mb-6 space-y-4">
-              <div>
-                <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted">
-                  <span
-                    className={cx(
-                      "rounded-full px-2 py-0.5 font-medium",
-                      meta.source === "claude" ? "bg-emerald-100 text-emerald-800" : "bg-accent-soft text-accent",
-                    )}
+          <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6">
+            <div role="alert" className="flex flex-wrap items-start gap-3 rounded-xl border border-signal/40 bg-signal/10 p-3.5 text-sm text-bone">
+              <Icons.Alert className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
+              <p className="min-w-0 flex-1">{error.message}</p>
+              <div className="flex gap-2">
+                {error.canFallBackToDemo && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      changeMode("demo");
+                      generate("demo");
+                    }}
                   >
-                    {meta.source === "claude" ? `Claude · ${meta.model}` : "Demo output"}
-                  </span>
-                  <span>{dirty ? "Unsaved changes" : projectId ? "Saved" : ""}</span>
-                </div>
-                <EditableText
-                  label="Project name"
-                  value={projectName}
-                  onChange={(v) => {
-                    setProjectName(v.replace(/\n/g, " "));
-                    setDirty(true);
-                  }}
-                  className="font-display text-3xl leading-tight tracking-tight sm:text-4xl"
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="primary" onClick={save}>
-                  <Icons.Save /> Save
-                </Button>
-                <Button onClick={() => setBriefOpen((o) => !o)} aria-expanded={briefOpen}>
-                  <Icons.Edit /> {briefOpen ? "Hide brief" : "Edit brief"}
-                </Button>
-                <Button onClick={() => generate()} disabled={loading}>
-                  <Icons.Refresh /> Regenerate
-                </Button>
-                <Button onClick={() => exportAs("md")}>
-                  <Icons.Download /> Markdown
-                </Button>
-                <Button onClick={() => exportAs("json")}>
-                  <Icons.Download /> JSON
+                    Use demo mode
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setError(null)}>
+                  Dismiss
                 </Button>
               </div>
             </div>
+          </div>
+        )}
 
-            {briefOpen && (
-              <div className="mb-8 animate-fade-up rounded-3xl bg-paper p-6 ring-1 ring-line sm:p-8">
-                <BriefForm value={brief} onChange={setBrief} onSubmit={() => generate()} loading={loading} mode={mode} />
-              </div>
-            )}
-
-            <ConceptCards concepts={concepts} selectedId={selected?.id} onSelect={setSelectedId} />
-
-            {selected && briefUsed && (
-              <div className="mt-8">
-                <ConceptWorkspace
-                  key={selected.id}
-                  concept={selected}
-                  index={selectedIndex}
-                  platforms={briefUsed.platforms}
-                  dispatch={dispatch}
-                />
-              </div>
+        {phase === "brief" && (
+          <div className="mx-auto max-w-2xl px-4 pb-16 pt-10 sm:px-6 sm:pt-14">
+            <h1 className="font-display text-4xl uppercase leading-none sm:text-5xl">
+              {hasCampaign ? "Edit brief" : "Create a campaign"}
+            </h1>
+            <p className="mb-8 mt-3 text-[15px] leading-relaxed text-bone/70">
+              {hasCampaign
+                ? "Update anything and create the campaign again."
+                : "Describe your brand and product. You'll get three campaign ideas and a storyboard you can edit and export."}
+            </p>
+            <BriefForm
+              value={brief}
+              onChange={setBrief}
+              photos={photos}
+              onAddPhotos={addPhotos}
+              onRemovePhoto={removePhoto}
+              onSubmit={() => generate()}
+              onCancel={hasCampaign ? () => setPhase("results") : undefined}
+              loading={false}
+              submitLabel={hasCampaign ? "Update Campaign" : "Create Campaign"}
+            />
+            {mode === "demo" && (
+              <p className="mt-6 text-center text-xs text-mute">
+                Demo mode: no API key needed. Ideas come from rule-based logic, not AI analysis.
+              </p>
             )}
           </div>
+        )}
+
+        {phase === "loading" && <ResultsSkeleton brand={brief.brandName} />}
+
+        {phase === "results" && hasCampaign && (
+          <Results
+            brief={briefUsed}
+            meta={meta}
+            concepts={concepts}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              touch();
+            }}
+            dispatch={dispatch}
+            photos={photos}
+            projectName={projectName}
+            onProjectName={(n) => {
+              setProjectName(n);
+              touch();
+            }}
+            saveStatus={saveStatus}
+            onExport={() => exportAs("md")}
+            onExportJson={() => exportAs("json")}
+            onSave={() => persist(true)}
+            onEditBrief={() => {
+              setPhase("brief");
+              window.scrollTo({ top: 0 });
+            }}
+            onRegenerate={() => generate()}
+            onNew={newCampaign}
+          />
         )}
       </main>
-
-      <footer className="relative z-10 border-t border-line py-8 text-center text-xs text-muted">
-        AI Creative Director · Built with Next.js, Tailwind CSS and Claude
-      </footer>
 
       <ProjectsDrawer
         open={drawerOpen}
@@ -418,13 +394,13 @@ export function Studio() {
       <div
         aria-live="polite"
         className={cx(
-          "fixed bottom-6 left-1/2 z-50 -translate-x-1/2 transition-all",
+          "fixed bottom-6 left-1/2 z-[70] -translate-x-1/2 transition-all",
           toast ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0",
         )}
       >
         {toast && (
-          <div className="flex items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-sm text-ivory shadow-xl">
-            <Icons.Check className="h-4 w-4 text-emerald-400" /> {toast}
+          <div className="flex items-center gap-2 whitespace-nowrap rounded-full bg-bone px-4 py-2 text-sm text-ink shadow-2xl">
+            <Icons.Check className="h-4 w-4 text-signal" /> {toast}
           </div>
         )}
       </div>

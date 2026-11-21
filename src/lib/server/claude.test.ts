@@ -3,22 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GeneratedCampaign } from "../prompt";
 import { GenerationError, generateWithClaude, getModel, isLiveAvailable, toGenerationError, type ClaudeClient } from "./claude";
 import { brief } from "@/test/fixtures";
+import { rawCampaign, rawConcept, rawRead } from "@/test/generated";
 
-function concept(title: string): GeneratedCampaign["concepts"][number] {
-  return {
-    title,
-    tagline: "t",
-    bigIdea: "b",
-    visualDirection: "v",
-    soundtrack: "s",
-    palette: [{ name: "Ink", hex: "#111111" }],
-    storyboard: [{ title: "f", visual: "v", audio: "a", onScreenText: "", durationSec: 3 }],
-    shotList: [{ shotType: "Wide", description: "d", camera: "c", location: "l", talent: "t", durationSec: 3 }],
-    captions: [{ platform: "instagram", text: "hello", hashtags: ["#a"] }],
-  };
-}
-
-const parsed: GeneratedCampaign = { concepts: [concept("A"), concept("B"), concept("C")] };
+const parsed: GeneratedCampaign = rawCampaign();
 
 function fakeClient(result: object | (() => never)) {
   const stream = vi.fn(() => ({
@@ -38,9 +25,10 @@ describe("generateWithClaude", () => {
       model: "claude-opus-5-5",
       parsed_output: parsed,
     });
-    const campaign = await generateWithClaude(brief, client);
+    const campaign = await generateWithClaude(brief, 0, client);
 
     expect(campaign.concepts.map((c) => c.title)).toEqual(["A", "B", "C"]);
+    expect(campaign.read.summary).toBe("Summary");
     expect(campaign.source).toBe("claude");
 
     const params = (stream.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
@@ -48,13 +36,13 @@ describe("generateWithClaude", () => {
     expect(params.output_config).toMatchObject({ effort: "medium", format: { type: "json_schema" } });
     expect(params.fallbacks).toBe("default");
     expect(params).not.toHaveProperty("thinking");
-    expect(String((params.messages as { content: string }[])[0].content)).toContain("Maison Verre");
+    expect(String((params.messages as { content: string }[])[0].content)).toContain("Atelier Noor");
   });
 
   it("omits fallbacks for models that don't support them", async () => {
     vi.stubEnv("ANTHROPIC_MODEL", "claude-haiku-5-5");
     const { client, stream } = fakeClient({ stop_reason: "end_turn", parsed_output: parsed });
-    await generateWithClaude(brief, client);
+    await generateWithClaude(brief, 0, client);
     const params = (stream.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
     expect(params.model).toBe("claude-haiku-5-5");
     expect(params).not.toHaveProperty("fallbacks");
@@ -64,17 +52,17 @@ describe("generateWithClaude", () => {
     [{ stop_reason: "refusal", parsed_output: null }, "UPSTREAM_REFUSED"],
     [{ stop_reason: "max_tokens", parsed_output: null }, "UPSTREAM_INVALID_OUTPUT"],
     [{ stop_reason: "end_turn", parsed_output: null }, "UPSTREAM_INVALID_OUTPUT"],
-    [{ stop_reason: "end_turn", parsed_output: { concepts: [concept("A")] } }, "UPSTREAM_INVALID_OUTPUT"],
+    [{ stop_reason: "end_turn", parsed_output: { read: rawRead, concepts: [rawConcept("A")] } }, "UPSTREAM_INVALID_OUTPUT"],
   ])("maps %o to %s", async (message, code) => {
     const { client } = fakeClient(message);
-    await expect(generateWithClaude(brief, client)).rejects.toMatchObject({ code });
+    await expect(generateWithClaude(brief, 0, client)).rejects.toMatchObject({ code });
   });
 
   it("maps thrown SDK errors", async () => {
     const { client } = fakeClient(() => {
       throw new Anthropic.RateLimitError(429, {}, "slow down", new Headers());
     });
-    await expect(generateWithClaude(brief, client)).rejects.toMatchObject({
+    await expect(generateWithClaude(brief, 0, client)).rejects.toMatchObject({
       code: "UPSTREAM_RATE_LIMITED",
       status: 429,
     });

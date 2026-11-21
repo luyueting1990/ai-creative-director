@@ -37,6 +37,7 @@ describe("POST /api/generate", () => {
     const json = await res.json();
     expect(json.campaign.concepts).toHaveLength(3);
     expect(json.campaign.source).toBe("demo");
+    expect(json.campaign.read.summary).toContain("Atelier Noor");
     expect(generateWithClaude).not.toHaveBeenCalled();
   });
 
@@ -50,12 +51,12 @@ describe("POST /api/generate", () => {
     const res = await post({ brief: { ...brief, brandName: "" } });
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error.message).toBe("Brand name is required");
+    expect(json.error.message).toBe("Add your brand name");
     expect(json.error.details[0].path).toBe("brief.brandName");
   });
 
   it("rejects oversized bodies", async () => {
-    const res = await post({ brief: { ...brief, notes: "x".repeat(20_000) } });
+    const res = await post({ brief: { ...brief, brandDescription: "x".repeat(20_000) } });
     expect(res.status).toBe(413);
   });
 
@@ -69,10 +70,10 @@ describe("POST /api/generate", () => {
   it("generates with Claude in live mode", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
     generateWithClaude.mockResolvedValue({ ...generateDemoCampaign(brief), source: "claude" });
-    const res = await post({ brief, mode: "live" });
+    const res = await post({ brief, mode: "live", photoCount: 2 });
     expect(res.status).toBe(200);
     expect((await res.json()).campaign.source).toBe("claude");
-    expect(generateWithClaude).toHaveBeenCalledWith(expect.objectContaining({ brandName: "Maison Verre" }));
+    expect(generateWithClaude).toHaveBeenCalledWith(expect.objectContaining({ brandName: "Atelier Noor" }), 2);
   });
 
   it("surfaces typed generation errors", async () => {

@@ -1,13 +1,15 @@
 import type { Brief } from "@/lib/schema";
 
 export const brief: Brief = {
-  brandName: "Maison Verre",
-  collection: "Salt Light linen",
-  audience: "Design-literate city dwellers 28–45",
-  goal: "Drive pre-orders for the launch",
-  tone: "Calm, poetic, understated",
-  platforms: ["instagram", "tiktok"],
-  notes: "",
+  brandName: "Atelier Noor",
+  brandDescription:
+    "A small-batch label making handmade knitwear from recycled wool, with a playful, colourful point of view.",
+  productDescription: "The Winter Bloom capsule: six oversized cardigans in hand-dyed merino.",
+  goal: "Launch the capsule and drive pre-orders.",
+  links: ["https://instagram.com/ateliernoor", "https://ateliernoor.com/winter-bloom"],
+  platforms: [],
+  audience: "",
+  durationSec: undefined,
 };
 
 export function sequentialIds() {
