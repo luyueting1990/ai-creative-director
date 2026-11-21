@@ -4,29 +4,25 @@ import type { GeneratedCampaign } from "@/lib/prompt";
 export function rawConcept(title: string): GeneratedCampaign["concepts"][number] {
   return {
     title: ` ${title} `,
-    tagline: "Tagline",
-    bigIdea: "Idea",
-    whyItWorks: "Because",
-    visualDirection: "Direction",
-    moodboard: { keywords: ["k"], lighting: "l", styling: "s", locations: "loc", references: ["r"] },
-    soundtrack: "Music",
+    idea: "Idea",
+    rationale: "Because",
+    look: { setting: "Studio", lighting: "Soft", styling: "Minimal" },
+    music: "Piano",
     palette: [
       { name: "Bone", hex: "f3ebdd" },
       { name: "Short", hex: "#abc" },
       { name: "Broken", hex: "not-a-colour" },
     ],
-    storyboard: [{ title: "F1", visual: "v", audio: "a", onScreenText: "", durationSec: 500, featuresProduct: true }],
-    shotList: [
+    shots: [
       {
-        shotType: "Wide",
+        title: "Open",
         description: "d",
-        camera: "c",
-        movement: "m",
-        lighting: "l",
-        location: "l",
-        talent: "t",
+        durationSec: 500,
+        showsProduct: true,
+        onScreenText: "",
+        camera: "50mm",
+        setting: "Studio",
         direction: "dir",
-        durationSec: 3.333,
       },
     ],
     hooks: [
@@ -40,14 +36,8 @@ export function rawConcept(title: string): GeneratedCampaign["concepts"][number]
   };
 }
 
-export const rawOverview: GeneratedCampaign["overview"] = {
-  summary: "Summary",
-  positioning: "Positioning",
-  audienceInsight: "Audience",
-  toneKeywords: ["Calm"],
-  pillars: [{ title: "P", description: "D" }],
-};
+export const rawRead: GeneratedCampaign["read"] = { summary: "Summary", tone: ["Calm"] };
 
 export function rawCampaign(n = 3): GeneratedCampaign {
-  return { overview: rawOverview, concepts: Array.from({ length: n }, (_, i) => rawConcept(String.fromCharCode(65 + i))) };
+  return { read: rawRead, concepts: Array.from({ length: n }, (_, i) => rawConcept(String.fromCharCode(65 + i))) };
 }

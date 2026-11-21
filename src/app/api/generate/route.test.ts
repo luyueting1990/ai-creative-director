@@ -37,7 +37,7 @@ describe("POST /api/generate", () => {
     const json = await res.json();
     expect(json.campaign.concepts).toHaveLength(3);
     expect(json.campaign.source).toBe("demo");
-    expect(json.campaign.overview.summary).toContain("Atelier Noor");
+    expect(json.campaign.read.summary).toContain("Atelier Noor");
     expect(generateWithClaude).not.toHaveBeenCalled();
   });
 
@@ -51,7 +51,7 @@ describe("POST /api/generate", () => {
     const res = await post({ brief: { ...brief, brandName: "" } });
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error.message).toBe("Brand name is required");
+    expect(json.error.message).toBe("Add your brand name");
     expect(json.error.details[0].path).toBe("brief.brandName");
   });
 

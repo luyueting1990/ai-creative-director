@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GeneratedCampaign } from "../prompt";
 import { GenerationError, generateWithClaude, getModel, isLiveAvailable, toGenerationError, type ClaudeClient } from "./claude";
 import { brief } from "@/test/fixtures";
-import { rawCampaign, rawConcept, rawOverview } from "@/test/generated";
+import { rawCampaign, rawConcept, rawRead } from "@/test/generated";
 
 const parsed: GeneratedCampaign = rawCampaign();
 
@@ -28,7 +28,7 @@ describe("generateWithClaude", () => {
     const campaign = await generateWithClaude(brief, 0, client);
 
     expect(campaign.concepts.map((c) => c.title)).toEqual(["A", "B", "C"]);
-    expect(campaign.overview.positioning).toBe("Positioning");
+    expect(campaign.read.summary).toBe("Summary");
     expect(campaign.source).toBe("claude");
 
     const params = (stream.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
@@ -52,7 +52,7 @@ describe("generateWithClaude", () => {
     [{ stop_reason: "refusal", parsed_output: null }, "UPSTREAM_REFUSED"],
     [{ stop_reason: "max_tokens", parsed_output: null }, "UPSTREAM_INVALID_OUTPUT"],
     [{ stop_reason: "end_turn", parsed_output: null }, "UPSTREAM_INVALID_OUTPUT"],
-    [{ stop_reason: "end_turn", parsed_output: { overview: rawOverview, concepts: [rawConcept("A")] } }, "UPSTREAM_INVALID_OUTPUT"],
+    [{ stop_reason: "end_turn", parsed_output: { read: rawRead, concepts: [rawConcept("A")] } }, "UPSTREAM_INVALID_OUTPUT"],
   ])("maps %o to %s", async (message, code) => {
     const { client } = fakeClient(message);
     await expect(generateWithClaude(brief, 0, client)).rejects.toMatchObject({ code });

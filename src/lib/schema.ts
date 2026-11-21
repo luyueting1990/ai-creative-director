@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { classifyLink, isHttpUrl } from "./links";
+import { isHttpUrl } from "./links";
 
 /**
  * Domain schemas shared by the client, the API route and the Claude integration.
@@ -26,9 +26,10 @@ export const DEFAULT_PLATFORMS: Platform[] = ["instagram", "tiktok"];
 export const DURATIONS = [15, 30, 45, 60] as const;
 export const DEFAULT_DURATION = 30;
 
-export const MAX_LINKS = 6;
+export const MAX_LINKS = 8;
 export const MAX_PHOTOS = 6;
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+export const MAX_SHOTS = 8;
 
 const text = (max: number) => z.string().trim().max(max, `Keep this under ${max} characters`);
 
@@ -38,27 +39,12 @@ const url = z
   .max(500, "That link is too long")
   .refine(isHttpUrl, "Enter a full link starting with https://");
 
-const linkList = (check?: (u: string) => boolean, message?: string) =>
-  z
-    .array(url)
-    .max(MAX_LINKS, `Add up to ${MAX_LINKS} links`)
-    .refine((list) => !check || list.every(check), message ?? "Unsupported link")
-    .default([]);
-
 export const BriefSchema = z.object({
-  brandName: text(80).min(1, "Brand name is required"),
+  brandName: text(80).min(1, "Add your brand name"),
   brandDescription: text(1200).min(10, "Describe the brand in a sentence or two"),
   productDescription: text(800).min(5, "Describe the product or collection"),
-  socialLinks: linkList(
-    (u) => ["instagram", "tiktok"].includes(classifyLink(u)),
-    "Social links must be Instagram or TikTok URLs",
-  ),
-  websiteLinks: linkList(),
-  videoLinks: linkList(
-    (u) => ["youtube", "instagram", "tiktok"].includes(classifyLink(u)),
-    "Video links must be YouTube, Instagram Reels or TikTok URLs",
-  ),
-  goal: text(400).min(5, "What should this campaign achieve?"),
+  goal: text(400).min(5, "Add a campaign goal"),
+  links: z.array(url).max(MAX_LINKS, `Add up to ${MAX_LINKS} links`).default([]),
   platforms: z.array(PlatformSchema).max(PLATFORMS.length).default([]),
   audience: text(400).optional().default(""),
   durationSec: z
@@ -74,10 +60,8 @@ export const EMPTY_BRIEF: BriefInput = {
   brandName: "",
   brandDescription: "",
   productDescription: "",
-  socialLinks: [],
-  websiteLinks: [],
-  videoLinks: [],
   goal: "",
+  links: [],
   platforms: [],
   audience: "",
   durationSec: undefined,
@@ -117,37 +101,23 @@ export const SwatchSchema = z.object({
 });
 export type Swatch = z.infer<typeof SwatchSchema>;
 
-export const MoodboardSchema = z.object({
-  keywords: z.array(z.string()),
-  lighting: z.string(),
-  styling: z.string(),
-  locations: z.string(),
-  references: z.array(z.string()),
-});
-export type Moodboard = z.infer<typeof MoodboardSchema>;
-
-export const FrameSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  visual: z.string(),
-  audio: z.string(),
-  onScreenText: z.string(),
-  durationSec: z.number().min(0).max(120),
-  featuresProduct: z.boolean().default(false),
-});
-export type Frame = z.infer<typeof FrameSchema>;
-
+/**
+ * One shot is both a storyboard frame (title, description, image, duration)
+ * and a line of the production plan (camera, setting, direction), so the
+ * storyboard and production notes can never drift apart.
+ */
 export const ShotSchema = z.object({
   id: z.string(),
-  shotType: z.string(),
+  title: z.string(),
   description: z.string(),
-  camera: z.string(),
-  movement: z.string().default(""),
-  lighting: z.string().default(""),
-  location: z.string(),
-  talent: z.string(),
+  durationSec: z.number().min(0).max(60),
+  showsProduct: z.boolean().default(false),
+  /** Explicitly chosen reference photo. Undefined = automatic; "none" = no image. */
+  photoId: z.string().optional(),
+  onScreenText: z.string().default(""),
+  camera: z.string().default(""),
+  setting: z.string().default(""),
   direction: z.string().default(""),
-  durationSec: z.number().min(0).max(120),
 });
 export type Shot = z.infer<typeof ShotSchema>;
 
@@ -169,35 +139,32 @@ export type Caption = z.infer<typeof CaptionSchema>;
 export const ConceptSchema = z.object({
   id: z.string(),
   title: z.string(),
-  tagline: z.string(),
-  bigIdea: z.string(),
-  whyItWorks: z.string().default(""),
-  visualDirection: z.string(),
-  moodboard: MoodboardSchema,
+  /** One sentence. */
+  idea: z.string(),
+  /** One sentence on why it suits the brief. */
+  rationale: z.string(),
+  look: z.object({ setting: z.string(), lighting: z.string(), styling: z.string() }),
   palette: z.array(SwatchSchema),
-  soundtrack: z.string(),
-  storyboard: z.array(FrameSchema),
-  shotList: z.array(ShotSchema),
+  music: z.string(),
+  shots: z.array(ShotSchema),
   hooks: z.array(HookSchema).default([]),
   captions: z.array(CaptionSchema),
 });
 export type Concept = z.infer<typeof ConceptSchema>;
 
-export const BrandOverviewSchema = z.object({
+export const BriefReadSchema = z.object({
   summary: z.string(),
-  positioning: z.string(),
-  audienceInsight: z.string(),
-  toneKeywords: z.array(z.string()),
-  pillars: z.array(z.object({ title: z.string(), description: z.string() })),
-  signals: z.array(z.string()).default([]),
+  tone: z.array(z.string()),
+  /** How the brief was interpreted, in plain language. */
+  notes: z.array(z.string()).default([]),
 });
-export type BrandOverview = z.infer<typeof BrandOverviewSchema>;
+export type BriefRead = z.infer<typeof BriefReadSchema>;
 
 export const GenerationSourceSchema = z.enum(["demo", "claude"]);
 export type GenerationSource = z.infer<typeof GenerationSourceSchema>;
 
 export const CampaignSchema = z.object({
-  overview: BrandOverviewSchema,
+  read: BriefReadSchema,
   concepts: z.array(ConceptSchema).length(3),
   source: GenerationSourceSchema,
   model: z.string().optional(),

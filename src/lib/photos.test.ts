@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, toPhotoItem, toPhotoMeta, validatePhotoFiles } from "./photos";
+import { formatBytes, photoForShot, toPhotoItem, toPhotoMeta, validatePhotoFiles } from "./photos";
 
 const file = (name: string, type = "image/png", size = 1000) => new File([new Uint8Array(size)], name, { type });
 
@@ -36,5 +36,33 @@ describe("photo helpers", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2 KB");
     expect(formatBytes(3 * 1024 * 1024)).toBe("3.0 MB");
+  });
+});
+
+describe("photoForShot", () => {
+  const photos = [
+    { id: "p1", name: "a", size: 1, type: "image/png", url: "blob:1" },
+    { id: "p2", name: "b", size: 1, type: "image/png", url: "blob:2" },
+  ];
+  const shots = [
+    { id: "s1", showsProduct: true },
+    { id: "s2", showsProduct: false },
+    { id: "s3", showsProduct: true },
+    { id: "s4", showsProduct: true },
+    { id: "s5", showsProduct: true, photoId: "p2" },
+    { id: "s6", showsProduct: true, photoId: "none" },
+  ];
+
+  it("cycles photos across product shots and skips other shots", () => {
+    expect(shots.slice(0, 4).map((_, i) => photoForShot(shots, i, photos)?.id ?? null)).toEqual(["p1", null, "p2", "p1"]);
+  });
+
+  it("respects an explicit choice or 'none'", () => {
+    expect(photoForShot(shots, 4, photos)?.id).toBe("p2");
+    expect(photoForShot(shots, 5, photos)).toBeNull();
+  });
+
+  it("returns null without photos", () => {
+    expect(photoForShot(shots, 0, [])).toBeNull();
   });
 });

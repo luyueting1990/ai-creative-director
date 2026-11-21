@@ -17,15 +17,13 @@ import {
   subscribeProjects,
 } from "@/lib/storage";
 import { BriefForm } from "./brief/BriefForm";
-import { Hero } from "./brief/Hero";
-import { GeneratingState } from "./GeneratingState";
 import { Header } from "./Header";
 import { ProjectsDrawer } from "./ProjectsDrawer";
+import { Results, ResultsSkeleton } from "./results/Results";
 import { Button, Icons, cx } from "./ui";
-import { Workspace, type SectionId } from "./workspace/Workspace";
 
 type Mode = "demo" | "live";
-type Phase = "brief" | "loading" | "workspace";
+type Phase = "brief" | "loading" | "results";
 type Meta = Omit<Campaign, "concepts">;
 
 interface ErrorState {
@@ -34,11 +32,12 @@ interface ErrorState {
 }
 
 const MODE_KEY = "acd.mode";
-/** Minimum time the demo loader is shown, so the workflow reads as a step rather than a flicker. */
-const DEMO_MIN_MS = 2000;
+/** Short, deliberate pause in demo mode so the transition reads as "working". */
+const DEMO_MIN_MS = 700;
+const AUTOSAVE_MS = 600;
 
 function defaultName(brief: BriefInput) {
-  return brief.brandName?.trim() ? `${brief.brandName.trim()} — Campaign` : "Untitled campaign";
+  return brief.brandName?.trim() ? `${brief.brandName.trim()} campaign` : "Untitled campaign";
 }
 
 export function Studio() {
@@ -53,14 +52,13 @@ export function Studio() {
   const [concepts, rawDispatch] = useReducer(editorReducer, []);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [briefUsed, setBriefUsed] = useState<Brief | null>(null);
-  const [selectedId, setSelectedId] = useState<string>("");
-  const [section, setSection] = useState<SectionId>("overview");
+  const [selectedId, setSelectedId] = useState("");
 
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState("");
   const [createdAt, setCreatedAt] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [saveStatus, setSaveStatus] = useState("");
 
   const projects = useSyncExternalStore(subscribeProjects, getProjectsSnapshot, getServerProjectsSnapshot);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -68,14 +66,17 @@ export function Studio() {
   const [error, setError] = useState<ErrorState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const formRef = useRef<HTMLDivElement>(null);
 
   const hasCampaign = concepts.length > 0 && meta !== null && briefUsed !== null;
+  const touch = useCallback(() => setRevision((r) => r + 1), []);
 
-  const dispatch = useCallback((action: EditorAction) => {
-    rawDispatch(action);
-    if (action.type !== "reset") setDirty(true);
-  }, []);
+  const dispatch = useCallback(
+    (action: EditorAction) => {
+      rawDispatch(action);
+      if (action.type !== "reset") touch();
+    },
+    [touch],
+  );
 
   /* --------------------------- bootstrap ----------------------------- */
   useEffect(() => {
@@ -93,16 +94,9 @@ export function Studio() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
+    const t = setTimeout(() => setToast(null), 2400);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
 
   function changeMode(m: Mode) {
     setMode(m);
@@ -113,73 +107,12 @@ export function Studio() {
     }
   }
 
-  /* ---------------------------- photos -------------------------------- */
-  function addPhotos(files: File[]): string[] {
-    const { accepted, errors } = validatePhotoFiles(files, photos.length);
-    const items = accepted.map((f) => toPhotoItem(f));
-    for (const p of items) if (p.url) urlCache.current.set(p.id, p.url);
-    if (items.length) setPhotos((prev) => [...prev, ...items]);
-    return errors;
-  }
-
-  function removePhoto(id: string) {
-    setPhotos((prev) => prev.filter((p) => p.id !== id));
-    const url = urlCache.current.get(id);
-    // Keep URLs that a saved project still references in this session; revoke the rest.
-    if (url && !projects.some((p) => p.photos.some((ph) => ph.id === id))) {
-      URL.revokeObjectURL(url);
-      urlCache.current.delete(id);
-    }
-    if (hasCampaign) setDirty(true);
-  }
-
-  /* --------------------------- generation ----------------------------- */
-  async function generate(useMode: Mode = mode) {
-    const parsed = BriefSchema.safeParse(brief);
-    if (!parsed.success) return;
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const returnTo: Phase = hasCampaign ? "workspace" : "brief";
-    setPhase("loading");
-    setError(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-
-    try {
-      const started = Date.now();
-      const campaign = await requestCampaign(brief, useMode, photos.length, controller.signal);
-      if (useMode === "demo") await new Promise((r) => setTimeout(r, Math.max(0, DEMO_MIN_MS - (Date.now() - started))));
-      if (controller.signal.aborted) return;
-
-      const { concepts: next, ...rest } = campaign;
-      rawDispatch({ type: "reset", concepts: next });
-      setMeta(rest);
-      setBriefUsed(parsed.data);
-      setSelectedId(next[0]?.id ?? "");
-      setSection("overview");
-      if (!projectId || !projectName) setProjectName(defaultName(brief));
-      setDirty(true);
-      setPhase("workspace");
-    } catch (err) {
-      if ((err as Error)?.name === "AbortError") return;
-      const e = err instanceof ApiError ? err : new ApiError("UPSTREAM_ERROR", "Something went wrong. Please try again.");
-      setError({ message: e.message, canFallBackToDemo: useMode === "live" });
-      setPhase(returnTo === "workspace" ? "workspace" : "brief");
-    }
-  }
-
-  function cancelGeneration() {
-    abortRef.current?.abort();
-    setPhase(hasCampaign ? "workspace" : "brief");
-  }
-
-  /* ---------------------------- projects ------------------------------ */
-  function buildProject(): Project | null {
-    if (!meta || !briefUsed) return null;
+  /* ---------------------------- project -------------------------------- */
+  const buildProject = useCallback((): Project | null => {
+    if (!meta || !briefUsed || !projectId) return null;
     const now = new Date().toISOString();
     return {
-      id: projectId ?? createId("project"),
+      id: projectId,
       name: projectName.trim() || defaultName(briefUsed),
       brief: briefUsed,
       photos: photos.map(toPhotoMeta),
@@ -194,28 +127,94 @@ export function Studio() {
       createdAt: createdAt ?? now,
       updatedAt: now,
     };
+  }, [meta, briefUsed, projectId, projectName, photos, concepts, selectedId, createdAt]);
+
+  const persist = useCallback(
+    (announce: boolean) => {
+      const project = buildProject();
+      if (!project) return;
+      try {
+        saveProject(project);
+        if (!createdAt) setCreatedAt(project.createdAt);
+        setSaveStatus("Saved in this browser");
+        if (announce) setToast("Saved");
+      } catch (err) {
+        setSaveStatus("Not saved");
+        setError({
+          message: err instanceof StorageError ? err.message : "Could not save the project.",
+          canFallBackToDemo: false,
+        });
+      }
+    },
+    [buildProject, createdAt],
+  );
+
+  // Autosave shortly after any change to the campaign.
+  useEffect(() => {
+    if (!hasCampaign || revision === 0) return;
+    const t = setTimeout(() => persist(false), AUTOSAVE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `revision` is the change signal
+  }, [revision, hasCampaign]);
+
+  /* ---------------------------- photos -------------------------------- */
+  function addPhotos(files: File[]): string[] {
+    const { accepted, errors } = validatePhotoFiles(files, photos.length);
+    const items = accepted.map((f) => toPhotoItem(f));
+    for (const p of items) if (p.url) urlCache.current.set(p.id, p.url);
+    if (items.length) {
+      setPhotos((prev) => [...prev, ...items]);
+      if (hasCampaign) touch();
+    }
+    return errors;
   }
 
-  function save() {
-    const project = buildProject();
-    if (!project) return;
+  function removePhoto(id: string) {
+    setPhotos((prev) => prev.filter((p) => p.id !== id));
+    if (hasCampaign) touch();
+  }
+
+  /* --------------------------- generation ----------------------------- */
+  async function generate(useMode: Mode = mode) {
+    const parsed = BriefSchema.safeParse(brief);
+    if (!parsed.success) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const previous: Phase = hasCampaign ? "results" : "brief";
+    setPhase("loading");
+    setError(null);
+    window.scrollTo({ top: 0 });
+
     try {
-      saveProject(project);
-      setProjectId(project.id);
-      setCreatedAt(project.createdAt);
-      setSavedAt(project.updatedAt);
-      setDirty(false);
-      setToast(photos.length ? "Project saved · photo previews last until refresh" : "Project saved");
+      const started = Date.now();
+      const campaign = await requestCampaign(brief, useMode, photos.length, controller.signal);
+      if (useMode === "demo") await new Promise((r) => setTimeout(r, Math.max(0, DEMO_MIN_MS - (Date.now() - started))));
+      if (controller.signal.aborted) return;
+
+      const { concepts: next, ...rest } = campaign;
+      rawDispatch({ type: "reset", concepts: next });
+      setMeta(rest);
+      setBriefUsed(parsed.data);
+      setSelectedId(next[0]?.id ?? "");
+      if (!projectId) {
+        setProjectId(createId("project"));
+        setCreatedAt(null);
+      }
+      if (!projectName) setProjectName(defaultName(brief));
+      setPhase("results");
+      touch();
     } catch (err) {
-      setError({
-        message: err instanceof StorageError ? err.message : "Could not save the project.",
-        canFallBackToDemo: false,
-      });
+      if ((err as Error)?.name === "AbortError") return;
+      const e = err instanceof ApiError ? err : new ApiError("UPSTREAM_ERROR", "Something went wrong. Please try again.");
+      setError({ message: e.message, canFallBackToDemo: useMode === "live" });
+      setPhase(previous === "results" ? "results" : "brief");
     }
   }
 
+  /* ---------------------------- projects ------------------------------ */
   function openProject(p: Project) {
-    if (dirty && !window.confirm("Discard unsaved changes to the current campaign?")) return;
     abortRef.current?.abort();
     const { concepts: cs, ...rest } = p.campaign;
     rawDispatch({ type: "reset", concepts: cs });
@@ -224,20 +223,18 @@ export function Studio() {
     setBriefUsed(p.brief);
     setPhotos(p.photos.map((m) => ({ ...m, url: urlCache.current.get(m.id) })));
     setSelectedId(p.selectedConceptId ?? cs[0]?.id ?? "");
-    setSection("overview");
     setProjectId(p.id);
     setProjectName(p.name);
     setCreatedAt(p.createdAt);
-    setSavedAt(p.updatedAt);
-    setDirty(false);
+    setRevision(0);
+    setSaveStatus("Saved in this browser");
     setError(null);
     setDrawerOpen(false);
-    setPhase("workspace");
+    setPhase("results");
     window.scrollTo({ top: 0 });
   }
 
   function newCampaign() {
-    if (dirty && !window.confirm("Discard unsaved changes and start a new campaign?")) return;
     abortRef.current?.abort();
     rawDispatch({ type: "reset", concepts: [] });
     setMeta(null);
@@ -246,23 +243,18 @@ export function Studio() {
     setProjectId(null);
     setProjectName("");
     setCreatedAt(null);
-    setSavedAt(null);
+    setRevision(0);
+    setSaveStatus("");
     setBrief(EMPTY_BRIEF);
     setPhotos([]);
-    setDirty(false);
     setError(null);
     setPhase("brief");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0 });
   }
 
   function remove(id: string) {
     deleteProject(id);
-    if (id === projectId) {
-      setProjectId(null);
-      setCreatedAt(null);
-      setSavedAt(null);
-      if (hasCampaign) setDirty(true);
-    }
+    if (id === projectId) setSaveStatus("Deleted from this browser");
   }
 
   async function importFile(file: File) {
@@ -285,12 +277,7 @@ export function Studio() {
     const base = slugify(p.name);
     if (kind === "md") downloadFile(`${base}.md`, projectToMarkdown(p), "text/markdown;charset=utf-8");
     else downloadFile(`${base}.json`, JSON.stringify(p, null, 2), "application/json");
-    setToast(kind === "md" ? "Treatment downloaded" : "Project file downloaded");
-  }
-
-  function editBrief() {
-    setPhase("brief");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setToast(kind === "md" ? "Campaign exported" : "Project file downloaded");
   }
 
   /* ----------------------------- render -------------------------------- */
@@ -306,10 +293,10 @@ export function Studio() {
         onNew={newCampaign}
       />
 
-      <main>
+      <main className="min-h-[calc(100vh-3.5rem)]">
         {error && (
-          <div className="mx-auto max-w-[1440px] px-4 pt-6 sm:px-8">
-            <div role="alert" className="flex flex-wrap items-start gap-3 rounded-2xl border border-signal/50 bg-signal/10 p-4 text-sm text-bone">
+          <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6">
+            <div role="alert" className="flex flex-wrap items-start gap-3 rounded-xl border border-signal/40 bg-signal/10 p-3.5 text-sm text-bone">
               <Icons.Alert className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
               <p className="min-w-0 flex-1">{error.message}</p>
               <div className="flex gap-2">
@@ -333,76 +320,66 @@ export function Studio() {
         )}
 
         {phase === "brief" && (
-          <>
-            {!hasCampaign && <Hero onStart={() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />}
-            <div ref={formRef} className="mx-auto max-w-[1440px] scroll-mt-16 px-4 pb-16 pt-14 sm:px-8">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-mute">
-                    {hasCampaign ? "Edit & regenerate" : "Step 01 / Brief"}
-                  </p>
-                  <h2 className="mt-3 font-display text-[clamp(2.8rem,8vw,6rem)] uppercase leading-[0.85]">
-                    The <span className="font-serif normal-case italic text-signal">brief</span>
-                  </h2>
-                </div>
-                <p className="max-w-sm text-sm text-mute">
-                  Required: brand name, brand description, product and goal. Everything else is optional but makes the
-                  workspace richer.
-                </p>
-              </div>
-              <BriefForm
-                value={brief}
-                onChange={setBrief}
-                photos={photos}
-                onAddPhotos={addPhotos}
-                onRemovePhoto={removePhoto}
-                onSubmit={() => generate()}
-                onCancel={hasCampaign ? () => setPhase("workspace") : undefined}
-                loading={false}
-                mode={mode}
-              />
-            </div>
-          </>
+          <div className="mx-auto max-w-2xl px-4 pb-16 pt-10 sm:px-6 sm:pt-14">
+            <h1 className="font-display text-4xl uppercase leading-none sm:text-5xl">
+              {hasCampaign ? "Edit brief" : "Create a campaign"}
+            </h1>
+            <p className="mb-8 mt-3 text-[15px] leading-relaxed text-bone/70">
+              {hasCampaign
+                ? "Update anything and create the campaign again."
+                : "Describe your brand and product. You'll get three campaign ideas and a storyboard you can edit and export."}
+            </p>
+            <BriefForm
+              value={brief}
+              onChange={setBrief}
+              photos={photos}
+              onAddPhotos={addPhotos}
+              onRemovePhoto={removePhoto}
+              onSubmit={() => generate()}
+              onCancel={hasCampaign ? () => setPhase("results") : undefined}
+              loading={false}
+              submitLabel={hasCampaign ? "Update Campaign" : "Create Campaign"}
+            />
+            {mode === "demo" && (
+              <p className="mt-6 text-center text-xs text-mute">
+                Demo mode: no API key needed. Ideas come from rule-based logic, not AI analysis.
+              </p>
+            )}
+          </div>
         )}
 
-        {phase === "loading" && <GeneratingState mode={mode} brand={brief.brandName} onCancel={cancelGeneration} />}
+        {phase === "loading" && <ResultsSkeleton brand={brief.brandName} />}
 
-        {phase === "workspace" && hasCampaign && (
-          <Workspace
+        {phase === "results" && hasCampaign && (
+          <Results
             brief={briefUsed}
             meta={meta}
             concepts={concepts}
             selectedId={selectedId}
             onSelect={(id) => {
               setSelectedId(id);
-              setDirty(true);
+              touch();
             }}
             dispatch={dispatch}
             photos={photos}
-            section={section}
-            onSection={setSection}
             projectName={projectName}
             onProjectName={(n) => {
               setProjectName(n);
-              setDirty(true);
+              touch();
             }}
-            dirty={dirty}
-            savedAt={savedAt}
-            onSave={save}
-            onExport={exportAs}
-            onEditBrief={editBrief}
+            saveStatus={saveStatus}
+            onExport={() => exportAs("md")}
+            onExportJson={() => exportAs("json")}
+            onSave={() => persist(true)}
+            onEditBrief={() => {
+              setPhase("brief");
+              window.scrollTo({ top: 0 });
+            }}
             onRegenerate={() => generate()}
-            onOpenProjects={() => setDrawerOpen(true)}
+            onNew={newCampaign}
           />
         )}
       </main>
-
-      <footer className="border-t border-bone/10 px-4 py-10 sm:px-8">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-2 text-xs text-mute sm:flex-row sm:justify-between">
-          <span className="font-display text-base uppercase tracking-wide text-bone">AI Creative Director</span>
-          <span>Demo content is illustrative. Built with Next.js, TypeScript & Tailwind CSS, ready for Claude.</span>
-        </div>
-      </footer>
 
       <ProjectsDrawer
         open={drawerOpen}
@@ -422,7 +399,7 @@ export function Studio() {
         )}
       >
         {toast && (
-          <div className="flex items-center gap-2 whitespace-nowrap rounded-full bg-bone px-4 py-2.5 text-sm text-ink shadow-2xl">
+          <div className="flex items-center gap-2 whitespace-nowrap rounded-full bg-bone px-4 py-2 text-sm text-ink shadow-2xl">
             <Icons.Check className="h-4 w-4 text-signal" /> {toast}
           </div>
         )}

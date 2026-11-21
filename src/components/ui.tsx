@@ -17,7 +17,7 @@ type Variant = "primary" | "signal" | "secondary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-bone text-ink hover:bg-white",
-  signal: "bg-signal text-ink hover:bg-[#ff6a4f] shadow-[0_12px_40px_-12px_rgba(255,77,46,0.7)]",
+  signal: "bg-signal text-ink hover:bg-[#ff6a4f]",
   secondary: "border border-bone/20 text-bone hover:border-bone/60 hover:bg-bone/5",
   ghost: "text-bone/70 hover:text-bone hover:bg-bone/5",
   danger: "text-signal hover:bg-signal/10",
@@ -33,11 +33,11 @@ export const Button = forwardRef<
       type={type}
       className={cx(
         "inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all duration-200",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acid",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal",
         "disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]",
         size === "sm" && "h-8 px-3.5 text-xs",
         size === "md" && "h-10 px-5 text-sm",
-        size === "lg" && "h-14 px-8 text-base tracking-wide",
+        size === "lg" && "h-12 px-7 text-[15px]",
         VARIANTS[variant],
         className,
       )}
@@ -58,7 +58,7 @@ export const IconButton = forwardRef<
       title={label}
       className={cx(
         "inline-flex h-8 w-8 items-center justify-center rounded-full text-current opacity-60 transition hover:bg-current/10 hover:opacity-100",
-        "focus-visible:outline-2 focus-visible:outline-acid disabled:opacity-20 disabled:hover:bg-transparent",
+        "focus-visible:outline-2 focus-visible:outline-signal disabled:opacity-20 disabled:hover:bg-transparent",
         className,
       )}
       {...props}
@@ -118,12 +118,12 @@ export function DemoBadge({ className }: { className?: string }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-full border border-acid/40 bg-acid/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-acid",
+        "inline-flex items-center gap-1.5 rounded-full border border-bone/20 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-bone/70",
         className,
       )}
     >
-      <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-acid" aria-hidden />
-      Illustrative demo
+      <span className="h-1.5 w-1.5 rounded-full bg-signal" aria-hidden />
+      Demo · rule-based
     </span>
   );
 }
@@ -178,6 +178,8 @@ export const Icons = {
   Image: icon(<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></>),
   Link: icon(<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />),
   Video: icon(<><rect x="2" y="6" width="14" height="12" rx="2" /><path d="M16 10l6-3v10l-6-3" /></>),
+  More: icon(<><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></>),
+  Chevron: icon(<path d="M6 9l6 6 6-6" />),
   Star: icon(<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3z" />),
   Info: icon(<><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>),
   External: icon(<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />),

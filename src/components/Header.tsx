@@ -15,15 +15,12 @@ interface Props {
 export function Header({ mode, onModeChange, liveAvailable, model, projectCount, onOpenProjects, onNew }: Props) {
   return (
     <header className="sticky top-0 z-40 border-b border-bone/10 bg-ink/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-8">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         <button type="button" onClick={onNew} className="group flex items-center gap-3" aria-label="Start a new campaign">
-          <span className="grid h-9 w-9 place-items-center bg-signal font-display text-lg leading-none text-ink transition-transform group-hover:-rotate-6">
+          <span className="grid h-8 w-8 place-items-center bg-signal font-display text-base leading-none text-ink transition-transform group-hover:-rotate-6">
             CD
           </span>
-          <span className="hidden leading-none sm:block">
-            <span className="block font-display text-lg uppercase tracking-wide">Creative Director</span>
-            <span className="mt-1 block font-mono text-[9px] uppercase tracking-[0.3em] text-mute">AI campaign studio</span>
-          </span>
+          <span className="hidden font-display text-lg uppercase leading-none tracking-wide sm:block">Creative Director</span>
         </button>
 
         <div className="flex items-center gap-2 sm:gap-3">
@@ -47,7 +44,7 @@ export function Header({ mode, onModeChange, liveAvailable, model, projectCount,
                   }
                   className={cx(
                     "flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition",
-                    mode === m ? (m === "demo" ? "bg-acid text-ink" : "bg-bone text-ink") : "text-bone/60 hover:text-bone",
+                    mode === m ? "bg-bone text-ink" : "text-bone/60 hover:text-bone",
                     disabled && "cursor-not-allowed opacity-35 hover:text-bone/60",
                   )}
                 >

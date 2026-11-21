@@ -47,3 +47,21 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/**
+ * Image for a shot: an explicit choice wins ("none" hides it); otherwise
+ * product shots take uploaded photos in order, cycling if needed.
+ */
+export function photoForShot<T extends { id: string; showsProduct: boolean; photoId?: string }>(
+  shots: T[],
+  index: number,
+  photos: PhotoItem[],
+): PhotoItem | null {
+  const shot = shots[index];
+  if (!shot) return null;
+  if (shot.photoId === "none") return null;
+  if (shot.photoId) return photos.find((p) => p.id === shot.photoId) ?? null;
+  if (!shot.showsProduct || photos.length === 0) return null;
+  const nth = shots.slice(0, index).filter((s) => s.showsProduct && !s.photoId).length;
+  return photos[nth % photos.length];
+}

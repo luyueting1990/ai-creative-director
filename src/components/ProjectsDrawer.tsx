@@ -43,7 +43,7 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
       >
         <div className="flex items-center justify-between border-b border-bone/10 px-6 py-5">
           <div>
-            <h2 className="font-display text-4xl uppercase">Projects</h2>
+            <h2 className="font-display text-2xl uppercase">Projects</h2>
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-mute">Saved in this browser</p>
           </div>
           <IconButton ref={closeRef} label="Close projects" onClick={onClose}>
@@ -81,7 +81,7 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
                   >
                     <p className="truncate font-medium text-bone">{p.name}</p>
                     <p className="truncate text-xs text-mute">
-                      {p.campaign.concepts.map((c) => c.title).join(" · ")}
+                      {p.campaign.concepts.find((c) => c.id === p.selectedConceptId)?.title ?? p.campaign.concepts[0]?.title}
                     </p>
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-mute">
                       {p.campaign.source === "claude" ? "Claude" : "Demo"} · {p.photos.length} photos ·{" "}

@@ -4,30 +4,37 @@ import { projectToMarkdown, slugify } from "./export";
 import { brief } from "@/test/fixtures";
 
 describe("projectToMarkdown", () => {
+  const campaign = generateDemoCampaign(brief, { photoCount: 1 });
+  const chosen = campaign.concepts[1];
   const md = projectToMarkdown({
     name: "Winter Bloom",
     brief,
     photos: [{ id: "p1", name: "look-1.jpg", size: 1, type: "image/jpeg" }],
-    campaign: generateDemoCampaign(brief, { photoCount: 1 }),
+    campaign,
+    selectedConceptId: chosen.id,
   });
 
-  it("includes the demo disclaimer, brief, overview, all concepts and every section", () => {
+  it("exports the selected concept in full and the others briefly", () => {
     expect(md).toMatch(/^# Winter Bloom/);
-    expect(md).toContain("Illustrative demo content");
+    expect(md).toContain("demo mode by a rule-based engine");
+    expect(md).toContain(`## Concept: ${chosen.title}`);
+    expect(md).toContain("### Storyboard");
+    expect(md).toContain("### Hooks");
+    expect(md).toContain("### Captions");
+    expect(md).toContain("## Other concepts");
+    for (const other of campaign.concepts.filter((c) => c.id !== chosen.id)) expect(md).toContain(`- **${other.title}** — ${other.idea}`);
+  });
+
+  it("includes the brief, photo names and links", () => {
     expect(md).toContain("- **Brand:** Atelier Noor");
-    expect(md).toContain("- **Product photos:** look-1.jpg");
+    expect(md).toContain("- **Reference photos:** look-1.jpg");
     expect(md).toContain("  - Instagram: https://instagram.com/ateliernoor");
-    expect(md).toContain("## Brand overview");
-    expect(md.match(/^## Concept \d/gm)).toHaveLength(3);
-    for (const h of ["### Moodboard", "### Storyboard", "### Shot list", "### Hooks", "### Captions"]) expect(md).toContain(h);
-    expect(md).toContain("**TikTok:** ");
-    expect(md).toContain("_Generated");
   });
 
   it("escapes pipes inside table cells", () => {
-    const campaign = generateDemoCampaign(brief);
-    campaign.concepts[0].storyboard[0].visual = "a | b";
-    expect(projectToMarkdown({ name: "x", brief, campaign })).toContain("a \\| b");
+    const c = generateDemoCampaign(brief);
+    c.concepts[0].shots[0].description = "a | b";
+    expect(projectToMarkdown({ name: "x", brief, campaign: c })).toContain("a \\| b");
   });
 });
 
