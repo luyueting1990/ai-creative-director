@@ -4,15 +4,23 @@ import { projectToMarkdown, slugify } from "./export";
 import { brief } from "@/test/fixtures";
 
 describe("projectToMarkdown", () => {
-  const md = projectToMarkdown({ name: "Salt Light", brief, campaign: generateDemoCampaign(brief) });
+  const md = projectToMarkdown({
+    name: "Winter Bloom",
+    brief,
+    photos: [{ id: "p1", name: "look-1.jpg", size: 1, type: "image/jpeg" }],
+    campaign: generateDemoCampaign(brief, { photoCount: 1 }),
+  });
 
-  it("includes brief, all concepts and every section", () => {
-    expect(md).toMatch(/^# Salt Light/);
-    expect(md).toContain("- **Brand:** Maison Verre");
+  it("includes the demo disclaimer, brief, overview, all concepts and every section", () => {
+    expect(md).toMatch(/^# Winter Bloom/);
+    expect(md).toContain("Illustrative demo content");
+    expect(md).toContain("- **Brand:** Atelier Noor");
+    expect(md).toContain("- **Product photos:** look-1.jpg");
+    expect(md).toContain("  - Instagram: https://instagram.com/ateliernoor");
+    expect(md).toContain("## Brand overview");
     expect(md.match(/^## Concept \d/gm)).toHaveLength(3);
-    expect(md).toContain("### Storyboard");
-    expect(md).toContain("### Shot list");
-    expect(md).toContain("**Instagram** — ");
+    for (const h of ["### Moodboard", "### Storyboard", "### Shot list", "### Hooks", "### Captions"]) expect(md).toContain(h);
+    expect(md).toContain("**TikTok:** ");
     expect(md).toContain("_Generated");
   });
 
@@ -25,7 +33,7 @@ describe("projectToMarkdown", () => {
 
 describe("slugify", () => {
   it("creates safe file names", () => {
-    expect(slugify("Maison Verre — Salt Light!")).toBe("maison-verre-salt-light");
+    expect(slugify("Atelier Noor — Winter Bloom!")).toBe("atelier-noor-winter-bloom");
     expect(slugify("***")).toBe("campaign");
   });
 });

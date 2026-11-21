@@ -28,6 +28,7 @@ function project(id: string, updatedAt = "2026-01-01T00:00:00.000Z"): Project {
     id,
     name: `Project ${id}`,
     brief,
+    photos: [{ id: "photo_1", name: "look.jpg", size: 1200, type: "image/jpeg" }],
     campaign: generateDemoCampaign(brief),
     createdAt: updatedAt,
     updatedAt,
@@ -87,6 +88,12 @@ describe("project storage", () => {
 });
 
 describe("parseProjectFile", () => {
+  it("fills defaults for projects saved before photos existed", () => {
+    const { photos: _photos, ...legacy } = project("old");
+    void _photos;
+    expect(parseProjectFile(JSON.stringify(legacy)).photos).toEqual([]);
+  });
+
   it("round-trips an exported project", () => {
     const p = project("x");
     expect(parseProjectFile(JSON.stringify(p))).toEqual(p);

@@ -3,7 +3,7 @@ import { generateDemoCampaign } from "./demo";
 import { editorReducer, totalDuration } from "./editor";
 import { brief, sequentialIds } from "@/test/fixtures";
 
-const initial = generateDemoCampaign(brief, sequentialIds()).concepts;
+const initial = generateDemoCampaign(brief, { idFactory: sequentialIds() }).concepts;
 const c = initial[0];
 
 describe("editorReducer", () => {
@@ -34,6 +34,20 @@ describe("editorReducer", () => {
 
     const appended = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "shotList" });
     expect(appended[0].shotList.at(-1)?.shotType).toBe("Medium");
+  });
+
+  it("adds and edits hooks", () => {
+    const added = editorReducer(initial, { type: "addItem", conceptId: c.id, list: "hooks", platform: "tiktok" });
+    const hook = added[0].hooks.at(-1)!;
+    expect(hook).toMatchObject({ platform: "tiktok", text: "" });
+    const edited = editorReducer(added, { type: "updateItem", conceptId: c.id, list: "hooks", itemId: hook.id, patch: { text: "POV" } });
+    expect(edited[0].hooks.at(-1)?.text).toBe("POV");
+  });
+
+  it("toggles whether a frame features the product", () => {
+    const f = c.storyboard[0];
+    const next = editorReducer(initial, { type: "updateItem", conceptId: c.id, list: "storyboard", itemId: f.id, patch: { featuresProduct: !f.featuresProduct } });
+    expect(next[0].storyboard[0].featuresProduct).toBe(!f.featuresProduct);
   });
 
   it("adds a caption for a specific platform", () => {

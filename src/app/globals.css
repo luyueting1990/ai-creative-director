@@ -1,66 +1,107 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens — "editorial noir": near-black stage, bone paper, a signal-red
+ * accent and an acid highlight used sparingly.
+ */
 @theme {
-  --color-ivory: #f7f4ee;
-  --color-paper: #fbfaf7;
-  --color-ink: #151412;
-  --color-muted: #6f685e;
-  --color-line: #e5dfd4;
-  --color-accent: #a8743b;
-  --color-accent-soft: #f1e6d6;
+  --color-ink: #0a0a0b;
+  --color-char: #131315;
+  --color-char-2: #1b1b1e;
+  --color-bone: #f2ede4;
+  --color-paper: #ebe5da;
+  --color-mute: #8f8a83;
+  --color-signal: #ff4d2e;
+  --color-acid: #d7ff3b;
+  --color-lilac: #c9b8ff;
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-display: var(--font-anton), "Arial Narrow", Impact, sans-serif;
+  --font-serif: var(--font-instrument), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
-  --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-marquee: marquee 38s linear infinite;
   --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
 
   @keyframes fade-up {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: translateY(0); }
   }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
   @keyframes shimmer {
-    from { background-position: -400px 0; }
-    to { background-position: 400px 0; }
+    from { background-position: -600px 0; }
+    to { background-position: 600px 0; }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.8); }
   }
 }
 
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--color-ivory);
-  color: var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-bone);
   font-family: var(--font-sans);
 }
 
 ::selection {
-  background: var(--color-accent-soft);
+  background: var(--color-signal);
+  color: var(--color-ink);
 }
 
-/* Subtle paper grain for the editorial feel. */
-.grain::before {
+/* Film-grain overlay for the editorial feel. */
+.grain::after {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: -50%;
   pointer-events: none;
-  z-index: 0;
-  opacity: 0.35;
-  background-image: radial-gradient(rgba(21, 20, 18, 0.06) 1px, transparent 1px);
-  background-size: 3px 3px;
+  z-index: 60;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .skeleton {
-  background: linear-gradient(90deg, rgba(21,20,18,0.05) 0%, rgba(21,20,18,0.1) 50%, rgba(21,20,18,0.05) 100%);
-  background-size: 800px 100%;
+  background: linear-gradient(90deg, rgba(242,237,228,0.04) 0%, rgba(242,237,228,0.1) 50%, rgba(242,237,228,0.04) 100%);
+  background-size: 1200px 100%;
   animation: var(--animate-shimmer);
 }
 
+/* Film-strip sprocket holes for storyboard cards. */
+.sprockets {
+  background-image: radial-gradient(circle at center, var(--color-ink) 0 3px, transparent 3.5px);
+  background-size: 16px 12px;
+  background-repeat: repeat-x;
+  background-position: 4px center;
+}
+
+.text-outline {
+  -webkit-text-stroke: 2px var(--color-bone);
+  color: transparent;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }

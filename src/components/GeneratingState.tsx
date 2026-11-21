@@ -1,48 +1,57 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Spinner } from "./ui";
+import { Button, Spinner } from "./ui";
 
 const STAGES = [
-  "Reading the brief",
-  "Finding three strategic angles",
-  "Building visual worlds & palettes",
-  "Boarding the films frame by frame",
-  "Writing the shot lists",
-  "Drafting platform-native captions",
+  "Reading your brief",
+  "Matching tone & category keywords",
+  "Choosing three creative directions",
+  "Building moodboards & palettes",
+  "Boarding the films, frame by frame",
+  "Writing shot lists, hooks & captions",
 ];
 
-export function GeneratingState({ mode }: { mode: "demo" | "live" }) {
+export function GeneratingState({ mode, brand, onCancel }: { mode: "demo" | "live"; brand: string; onCancel: () => void }) {
   const [stage, setStage] = useState(0);
   useEffect(() => {
-    const t = setInterval(
-      () => setStage((s) => Math.min(s + 1, STAGES.length - 1)),
-      mode === "demo" ? 220 : 9000,
-    );
+    const t = setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), mode === "demo" ? 320 : 9000);
     return () => clearInterval(t);
   }, [mode]);
 
   return (
-    <div aria-live="polite" aria-busy="true" className="space-y-6">
-      <div className="flex items-center gap-3 text-sm text-ink/80">
-        <Spinner />
-        <span className="font-display text-lg italic">{STAGES[stage]}…</span>
-        {mode === "live" && <span className="text-xs text-muted">Claude is working — this can take a minute.</span>}
-      </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="overflow-hidden rounded-2xl bg-paper ring-1 ring-line">
-            <div className="skeleton h-20" />
-            <div className="space-y-3 p-5">
-              <div className="skeleton h-3 w-20 rounded" />
-              <div className="skeleton h-6 w-3/4 rounded" />
-              <div className="skeleton h-3 w-full rounded" />
-              <div className="skeleton h-3 w-5/6 rounded" />
-              <div className="skeleton h-3 w-2/3 rounded" />
-            </div>
-          </div>
+    <section aria-live="polite" aria-busy="true" className="mx-auto flex min-h-[70vh] max-w-5xl flex-col justify-center px-4 py-16 sm:px-8">
+      <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-mute">
+        {mode === "demo" ? "Demo engine · illustrative output" : "Claude · live generation"}
+      </p>
+      <h2 className="mt-4 font-display text-[clamp(3rem,10vw,8rem)] uppercase leading-[0.85] tracking-tight">
+        Directing
+        <br />
+        <span className="font-serif normal-case italic text-signal">{brand || "your brand"}</span>
+      </h2>
+
+      <ol className="mt-12 grid gap-3 sm:grid-cols-2">
+        {STAGES.map((s, i) => (
+          <li
+            key={s}
+            className={`flex items-center gap-3 border-t pt-3 text-sm transition-all duration-500 ${
+              i < stage ? "border-bone/30 text-bone/50" : i === stage ? "border-signal text-bone" : "border-bone/10 text-bone/25"
+            }`}
+          >
+            <span className="font-mono text-[11px] tabular-nums">{String(i + 1).padStart(2, "0")}</span>
+            {s}
+            {i === stage && <Spinner className="ml-auto h-3.5 w-3.5 text-signal" />}
+            {i < stage && <span className="ml-auto font-mono text-[10px] text-acid">DONE</span>}
+          </li>
         ))}
+      </ol>
+
+      <div className="mt-10 flex items-center gap-4">
+        {mode === "live" && <p className="text-xs text-mute">This can take a minute.</p>}
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
       </div>
-    </div>
+    </section>
   );
 }

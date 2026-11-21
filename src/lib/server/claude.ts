@@ -49,6 +49,7 @@ function defaultClient(): Anthropic {
 
 export async function generateWithClaude(
   brief: Brief,
+  photoCount = 0,
   client: ClaudeClient = defaultClient(),
 ): Promise<Campaign> {
   const model = getModel();
@@ -59,7 +60,7 @@ export async function generateWithClaude(
       model,
       max_tokens: 32000,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildUserPrompt(brief) }],
+      messages: [{ role: "user", content: buildUserPrompt(brief, photoCount) }],
       output_config: {
         effort: "medium",
         format: betaZodOutputFormat(GeneratedCampaignSchema),
