@@ -1,20 +1,26 @@
 import { createId } from "./id";
-import type { Caption, Concept, Frame, Platform, Shot } from "./schema";
+import type { Caption, Concept, Frame, Hook, Platform, Shot } from "./schema";
 
 /**
  * Pure reducer for editing a set of concepts. Keeping edits here (instead of
  * scattered setState calls) makes every editing behaviour unit-testable.
  */
 
-type ListKey = "storyboard" | "shotList" | "captions";
-type ItemOf<K extends ListKey> = K extends "storyboard" ? Frame : K extends "shotList" ? Shot : Caption;
+export type ListKey = "storyboard" | "shotList" | "hooks" | "captions";
+type ItemOf<K extends ListKey> = K extends "storyboard"
+  ? Frame
+  : K extends "shotList"
+    ? Shot
+    : K extends "hooks"
+      ? Hook
+      : Caption;
 
 export type EditorAction =
   | { type: "reset"; concepts: Concept[] }
   | {
       type: "updateConcept";
       conceptId: string;
-      patch: Partial<Omit<Concept, "id" | "storyboard" | "shotList" | "captions">>;
+      patch: Partial<Omit<Concept, "id" | "storyboard" | "shotList" | "hooks" | "captions">>;
     }
   | { type: "updateItem"; conceptId: string; list: ListKey; itemId: string; patch: Record<string, unknown> }
   | { type: "addItem"; conceptId: string; list: ListKey; afterId?: string; platform?: Platform }
@@ -31,6 +37,7 @@ export function blankItem<K extends ListKey>(list: K, platform: Platform = "inst
         audio: "",
         onScreenText: "",
         durationSec: 3,
+        featuresProduct: false,
       } as ItemOf<K>;
     case "shotList":
       return {
@@ -38,10 +45,15 @@ export function blankItem<K extends ListKey>(list: K, platform: Platform = "inst
         shotType: "Medium",
         description: "",
         camera: "",
+        movement: "",
+        lighting: "",
         location: "",
         talent: "",
+        direction: "",
         durationSec: 3,
       } as ItemOf<K>;
+    case "hooks":
+      return { id: createId("hook"), platform, text: "" } as ItemOf<K>;
     default:
       return { id: createId("caption"), platform, text: "", hashtags: [] } as unknown as ItemOf<K>;
   }

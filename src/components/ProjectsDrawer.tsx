@@ -29,7 +29,7 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
   return (
     <div className={cx("fixed inset-0 z-50", !open && "pointer-events-none invisible")} aria-hidden={!open}>
       <div
-        className={cx("absolute inset-0 bg-ink/30 backdrop-blur-sm transition-opacity", open ? "opacity-100" : "opacity-0")}
+        className={cx("absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity", open ? "opacity-100" : "opacity-0")}
         onClick={onClose}
       />
       <aside
@@ -37,14 +37,14 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
         aria-modal="true"
         aria-label="Saved projects"
         className={cx(
-          "absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-paper shadow-2xl transition-transform duration-300",
+          "absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-bone/10 bg-char shadow-2xl transition-transform duration-300",
           open ? "translate-x-0" : "translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between border-b border-line px-6 py-5">
+        <div className="flex items-center justify-between border-b border-bone/10 px-6 py-5">
           <div>
-            <h2 className="font-display text-2xl">Projects</h2>
-            <p className="text-xs text-muted">Saved in this browser</p>
+            <h2 className="font-display text-4xl uppercase">Projects</h2>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-mute">Saved in this browser</p>
           </div>
           <IconButton ref={closeRef} label="Close projects" onClick={onClose}>
             <Icons.X />
@@ -53,11 +53,11 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
 
         <div className="flex-1 overflow-y-auto p-4">
           {projects.length === 0 ? (
-            <div className="mt-16 text-center text-sm text-muted">
+            <div className="mt-16 text-center text-sm text-mute">
               <Icons.Folder className="mx-auto mb-3 h-6 w-6" />
               No saved projects yet.
               <br />
-              Generate a campaign and press <strong className="font-medium text-ink">Save</strong>.
+              Create a campaign and press <strong className="font-medium text-bone">Save</strong>.
             </div>
           ) : (
             <ul className="space-y-2">
@@ -65,8 +65,8 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
                 <li
                   key={p.id}
                   className={cx(
-                    "group flex items-stretch overflow-hidden rounded-xl bg-white ring-1 transition hover:ring-ink/30",
-                    p.id === currentId ? "ring-ink" : "ring-line",
+                    "group flex items-stretch overflow-hidden rounded-xl bg-ink ring-1 transition hover:ring-bone/40",
+                    p.id === currentId ? "ring-signal" : "ring-bone/10",
                   )}
                 >
                   <div className="flex w-2 flex-col" aria-hidden>
@@ -79,12 +79,12 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
                     onClick={() => onOpenProject(p)}
                     className="min-w-0 flex-1 px-4 py-3 text-left"
                   >
-                    <p className="truncate font-medium">{p.name}</p>
-                    <p className="truncate text-xs text-muted">
+                    <p className="truncate font-medium text-bone">{p.name}</p>
+                    <p className="truncate text-xs text-mute">
                       {p.campaign.concepts.map((c) => c.title).join(" · ")}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted">
-                      {p.campaign.source === "claude" ? "Claude" : "Demo"} · updated{" "}
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-mute">
+                      {p.campaign.source === "claude" ? "Claude" : "Demo"} · {p.photos.length} photos ·{" "}
                       {new Date(p.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
                     </p>
                   </button>
@@ -94,7 +94,7 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
                       onClick={() => {
                         if (window.confirm(`Delete "${p.name}"? This can't be undone.`)) onDelete(p.id);
                       }}
-                      className="hover:text-red-600"
+                      className="hover:!text-signal"
                     >
                       <Icons.Trash className="h-3.5 w-3.5" />
                     </IconButton>
@@ -105,7 +105,7 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
           )}
         </div>
 
-        <div className="border-t border-line p-4">
+        <div className="space-y-3 border-t border-bone/10 p-4">
           <input
             ref={fileRef}
             type="file"
@@ -120,6 +120,9 @@ export function ProjectsDrawer({ open, projects, currentId, onClose, onOpenProje
           <Button className="w-full" onClick={() => fileRef.current?.click()}>
             <Icons.Upload /> Import project JSON
           </Button>
+          <p className="text-center text-[11px] leading-relaxed text-mute">
+            Photo previews aren&apos;t stored. Reopened projects show file names until you re-attach photos.
+          </p>
         </div>
       </aside>
     </div>

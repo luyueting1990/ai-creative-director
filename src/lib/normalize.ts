@@ -1,6 +1,6 @@
 import { createId } from "./id";
 import type { GeneratedCampaign } from "./prompt";
-import { CampaignSchema, type Brief, type Campaign } from "./schema";
+import { CampaignSchema, campaignPlatforms, type Brief, type Campaign } from "./schema";
 
 export class InvalidGenerationError extends Error {
   constructor(message: string) {
@@ -11,7 +11,7 @@ export class InvalidGenerationError extends Error {
 
 const HEX = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
 
-function normalizeHex(input: string): string | null {
+export function normalizeHex(input: string): string | null {
   const m = input.trim().match(HEX);
   if (!m) return null;
   let hex = m[1];
@@ -42,41 +42,32 @@ export function normalizeGeneratedCampaign(
   idFactory: (prefix: string) => string = createId,
 ): Campaign {
   if (raw.concepts.length < 3) {
-    throw new InvalidGenerationError(
-      `Expected 3 concepts but the model returned ${raw.concepts.length}.`,
-    );
+    throw new InvalidGenerationError(`Expected 3 concepts but the model returned ${raw.concepts.length}.`);
   }
 
-  const allowed = new Set(brief.platforms);
+  const allowed = new Set(campaignPlatforms(brief));
 
   const concepts = raw.concepts.slice(0, 3).map((c) => ({
     id: idFactory("concept"),
     title: c.title.trim(),
     tagline: c.tagline.trim(),
     bigIdea: c.bigIdea.trim(),
+    whyItWorks: c.whyItWorks.trim(),
     visualDirection: c.visualDirection.trim(),
+    moodboard: c.moodboard,
     soundtrack: c.soundtrack.trim(),
     palette: c.palette.flatMap((s) => {
       const hex = normalizeHex(s.hex);
       return hex ? [{ name: s.name.trim() || hex, hex }] : [];
     }),
-    storyboard: c.storyboard.map((f) => ({
-      ...f,
-      id: idFactory("frame"),
-      durationSec: clampDuration(f.durationSec),
-    })),
-    shotList: c.shotList.map((s) => ({
-      ...s,
-      id: idFactory("shot"),
-      durationSec: clampDuration(s.durationSec),
-    })),
+    storyboard: c.storyboard.map((f) => ({ ...f, id: idFactory("frame"), durationSec: clampDuration(f.durationSec) })),
+    shotList: c.shotList.map((s) => ({ ...s, id: idFactory("shot"), durationSec: clampDuration(s.durationSec) })),
+    hooks: c.hooks
+      .filter((h) => h.platform === "tiktok" || h.platform === "instagram")
+      .map((h) => ({ ...h, id: idFactory("hook") })),
     captions: c.captions
       .filter((cap) => allowed.has(cap.platform))
-      .map((cap) => ({
-        ...cap,
-        id: idFactory("caption"),
-        hashtags: cap.hashtags.map(normalizeTag).filter(Boolean),
-      })),
+      .map((cap) => ({ ...cap, id: idFactory("caption"), hashtags: cap.hashtags.map(normalizeTag).filter(Boolean) })),
   }));
 
   for (const c of concepts) {
@@ -86,6 +77,7 @@ export function normalizeGeneratedCampaign(
   }
 
   const result = CampaignSchema.safeParse({
+    overview: { ...raw.overview, signals: [] },
     concepts,
     source: "claude",
     model,
